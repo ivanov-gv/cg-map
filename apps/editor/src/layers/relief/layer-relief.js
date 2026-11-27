@@ -157,9 +157,9 @@ function slopeEdits({feature, before}, context) {
 
 // Light and shade that cannot follow would no longer meet at the ridge, so that is refused.
 function ridgeProblem(edit, context) {
-  const {feature, before} = edit;
+  const {feature, before, origins} = edit;
   if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
-  if (isEndRemoved(before.geometry.coordinates, feature.geometry.coordinates)) return removedEndMessage;
+  if (isEndRemoved(before.geometry.coordinates, feature.geometry.coordinates, origins)) return removedEndMessage;
   const slopes = slopeEdits(edit, context);
   // One is sunlit and one is shaded.
   if (slopes.length < slopesOfRidge) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';

@@ -107,13 +107,18 @@ test('a ridge end cannot be removed, but a point between its ends can', () => {
     session: {workingFeature: () => before}
   };
   const behavior = reliefBehaviors['ridges.geojson'];
-  for (const coordinates of [points([2, 5], [4, 5]), points([0, 5], [2, 5])]) {
+  for (const coordinates of [points([2, 5], [4, 5]), points([0, 5], [2, 5]), points([2, 5])]) {
     assert.match(
       behavior.problem({feature: ridgeAt(coordinates), before}, context),
       /end cannot be removed/,
       'an end is not a point to delete'
     );
   }
+  assert.match(
+    behavior.problem({feature: ridgeAt(points([0, 5], [4, 5])), before, origins: [1, 2]}, context),
+    /end cannot be removed/,
+    'an inner point that took the old place is not that end'
+  );
   assert.equal(behavior.problem({feature: ridgeAt(points([0, 5], [4, 5])), before}, context), null);
 });
 

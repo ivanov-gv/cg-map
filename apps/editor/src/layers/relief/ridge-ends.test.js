@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {geometryAreaSquareMetres} from '../../geometry/geometry-measures.js';
-import {sidesOfRidge, slidEnd, slopesWithSlidEnds} from './ridge-ends.js';
+import {isEndRemoved, sidesOfRidge, slidEnd, slopesWithSlidEnds} from './ridge-ends.js';
 
 const step = 0.0001;
 const at = ([east, north]) => [19 + east * step, 42 + north * step].map(value => Math.round(value * 1e7) / 1e7);
@@ -57,4 +57,12 @@ test('the side that loses ground no longer has the old end', () => {
   const [first] = slopesWithSlidEnds(points([0, 7], [5, 5], [10, 5]), sides).filter(({key}) => key === 'shaded');
   const corners = first.after.geometry.coordinates[0].map(point => String(stepsOf(point)));
   assert.ok(!corners.includes('0,5') && corners.includes('0,7') && corners.includes('0,10'));
+});
+
+test('a removed end is told by its origin, not only by where it stood', () => {
+  assert.equal(isEndRemoved(ridge, points([5, 5], [10, 5]), [1, 2]), true);
+  assert.equal(isEndRemoved(ridge, points([5, 5]), [1]), true, 'both ends cannot go');
+  assert.equal(isEndRemoved(ridge, points([0, 5], [10, 5]), [0, 2]), false, 'the middle point can go');
+  assert.equal(isEndRemoved(ridge, points([5, 5], [5, 5], [10, 5]), [0, 1, 2]), false, 'a dragged end stays');
+  assert.equal(isEndRemoved(ridge, points([5, 5], [10, 5])), true, 'without origins, position is all there is');
 });
