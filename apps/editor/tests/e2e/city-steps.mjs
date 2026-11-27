@@ -45,9 +45,10 @@ export async function screenPoint(page, [east, north]) {
   }, at(east, north));
 }
 
-// Taps wait until the layer has drawn, as the editor itself ignores taps on a layer still loading.
+// Taps wait until the layer has drawn, as the editor itself ignores taps on a layer whose rendering is pending.
 export async function tapAt(page, position, options = {}) {
   await expect(page.locator('#status')).not.toContainText('Loading');
+  await waitForRepaint(page);
   const {x, y} = await screenPoint(page, position);
   await page.mouse.click(x, y, options);
 }

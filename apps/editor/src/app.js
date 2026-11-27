@@ -30,6 +30,7 @@ import {
   registerBehaviors
 } from './layers/shared/layer-behaviors.js';
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
+import {bridgeBehaviors} from './layers/roads/layer-bridges.js';
 import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
@@ -38,6 +39,7 @@ import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
 import {roadBehaviors} from './layers/roads/layer-roads.js';
 import {isPickableEntry, roadsClickTarget, roadsJointsToShow, roadsPickableEntries} from './layers/roads/roads-host.js';
 import {routeBehaviors} from './layers/routes/layer-routes.js';
+import {railwayBehaviors} from './layers/transport/layer-railways.js';
 import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
 import {stopBehaviors} from './layers/stops/layer-stops.js';
@@ -68,34 +70,18 @@ registerBehaviors(buildingBehaviors);
 registerBehaviors(addressBehaviors);
 registerBehaviors(placeBehaviors);
 registerBehaviors(roadBehaviors);
+registerBehaviors(bridgeBehaviors);
 registerBehaviors(greenBehaviors);
 registerBehaviors(waterBehaviors);
 registerBehaviors(reliefBehaviors);
 registerBehaviors(settlementBehaviors);
 registerBehaviors(stopBehaviors);
 registerBehaviors(routeBehaviors);
+registerBehaviors(railwayBehaviors);
 registerBehaviors(sketchBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
-const basemapLayers = {
-  'buildings.geojson': ['buildings'],
-  'building-labels.geojson': ['building-numbers'],
-  'land.geojson': ['land'],
-  'water.geojson': ['water', 'rivers'],
-  'roads.geojson': [
-    'road-casing',
-    'minor-casing',
-    'minor-roads',
-    'pedestrian-streets',
-    'footways',
-    'paths',
-    'cycleways',
-    'steps',
-    'major-roads',
-    'road-labels'
-  ]
-};
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 // The width at which the workspace becomes the phone one, as in style.css.
 const phoneLayout = matchMedia('(max-width: 720px)');
@@ -111,6 +97,7 @@ let activeEntries = [];
 let areGuidesVisible = true;
 let isSatelliteVisible = false;
 let isLayerLoading = false;
+let isSourceLoading = false;
 let rules;
 let levels;
 let session;
@@ -123,6 +110,7 @@ let pendingLayer = null;
 let objectList;
 let clickCandidates = null;
 let pendingPick = null;
+let pendingSourceLoad = null;
 let activeFilter = null;
 let pendingSelection = null;
 let resolvingItem = null;
@@ -180,6 +168,8 @@ function behaviorContext() {
     isPhone: () => phoneLayout.matches,
     isMagnetOn,
     entriesOf,
+    // A version 4 bundle has no derived slopes, so their behavior cannot follow a moved ridge there.
+    hasFile: filename => sources.has(filename),
     // The one level of the road graph that is shown, or null for all.
     shownLevel: () => shownLevel,
     select: entry => selectObject(entry, true),
@@ -300,7 +290,6 @@ function markedFeatures() {
 
 function refreshOverlay() {
   clickCandidates = null;
-  workingMap.hide();
   activeEntries = activeFilter
     ? activeFilter.entries(behaviorContext())
     : shownFiles().flatMap(filename => session.workingEntries(filename));
@@ -382,21 +371,59 @@ function toggleGuides() {
   clickCandidates = null;
   overlay.setGuidesVisible(areGuidesVisible);
   elementById('edit-guides').setAttribute('aria-pressed', String(areGuidesVisible));
-  showLoadingStatus();
+  if (!isSourceLoading) setStatus(layerStatus());
+  deferInteractionUntilRender();
 }
 
-// setData finishes in a worker. MapLibre reports idle only once the current data has rendered.
+// A source worker signals content before the next paint. The visible status follows that signal, while clicks, the
+// object list and selection keep waiting for the rendered layer, which a slow device may paint much later.
 function showLoadingStatus() {
   isLayerLoading = activeLayer !== null;
-  if (isLayerLoading) setStatus(`Loading ${activeLayer.name}…`, true);
+  isSourceLoading = isLayerLoading;
+  if (isLayerLoading) {
+    setStatus(`Loading ${activeLayer.name}…`, true);
+    watchSourceLoad('editor-source');
+  } else {
+    stopWatchingSourceLoad();
+    setStatus(layerStatus());
+  }
   renderObjectList();
 }
 
+// A presentation change has no new source content, so only its rendered state gates further interaction.
+function deferInteractionUntilRender() {
+  if (!activeLayer) return;
+  isLayerLoading = true;
+  renderObjectList();
+}
+
+function watchSourceLoad(sourceId) {
+  stopWatchingSourceLoad();
+  const source = map.getSource(sourceId);
+  if (!source || map.isSourceLoaded(sourceId)) return finishSourceLoading();
+  const handler = event => {
+    if (event.sourceDataType !== 'content') return;
+    finishSourceLoading();
+  };
+  pendingSourceLoad = {source, handler};
+  source.on('data', handler);
+}
+
+function stopWatchingSourceLoad() {
+  if (!pendingSourceLoad) return;
+  pendingSourceLoad.source.off('data', pendingSourceLoad.handler);
+  pendingSourceLoad = null;
+}
+
+function finishSourceLoading() {
+  if (!isSourceLoading) return;
+  stopWatchingSourceLoad();
+  isSourceLoading = false;
+  setStatus(layerStatus());
+}
+
 function finishLayerLoading() {
-  if (isLayerLoading) {
-    isLayerLoading = false;
-    setStatus(layerStatus());
-  }
+  isLayerLoading = false;
   if (pendingSelection) {
     const entry = pendingSelection;
     pendingSelection = null;
@@ -957,11 +984,24 @@ function installWorkspaceControls() {
   installInspectorViewport();
 }
 
+// Software WebGL spends seconds compiling and rasterising shaders, which delays every map move. Draw at quarter scale
+// there so an edit still appears at once; a hardware renderer keeps its normal resolution.
+function softwareRendererPixelRatio() {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+  const info = context?.getExtension('WEBGL_debug_renderer_info');
+  const renderer = info ? String(context.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
+  context?.getExtension('WEBGL_lose_context')?.loseContext();
+  return /swiftshader|llvmpipe|software/i.test(renderer) ? 0.25 : null;
+}
+
 async function createEditorMap(mapMetadata) {
   if (!archiveFilenamePattern.test(mapMetadata.archive)) throw new Error('Invalid map archive metadata.');
   registerArchiveProtocol(maplibregl, pmtiles);
   const basemapURL = 'pmtiles://' + new URL(`data/${mapMetadata.archive}`, location.href).href;
+  const pixelRatio = softwareRendererPixelRatio();
   map = createMap({engine: maplibregl, container: 'map', basemapURL, assetBaseURL: location.href});
+  if (pixelRatio) map.setPixelRatio(pixelRatio);
   // Exposed for browser tests and manual inspection, like the public app's kompasDebug.
   window.editorDebug = {
     get map() {
@@ -984,7 +1024,6 @@ function installMapLayers(visibilityConfig) {
   installPlaces(map, publishedPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
-    basemapLayers,
     visibilityConfig: placeVisibility,
     publishedPlaces,
     sharedSource: 'editor-source'

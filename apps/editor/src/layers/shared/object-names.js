@@ -7,6 +7,8 @@ const kindLabels = {
   'places.geojson': 'Place',
   'roads.geojson': 'Road',
   'road-nodes.geojson': 'Junction',
+  'bridges.geojson': 'Bridge',
+  'railways.geojson': 'Railway',
   'land.geojson': 'Green area',
   'protected-areas.geojson': 'Protected area',
   'water.geojson': 'Water',
