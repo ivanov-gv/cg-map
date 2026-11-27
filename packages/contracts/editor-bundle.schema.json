@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pinned editor source bundle",
-  "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle. Versions are frozen once released.",
+  "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle; version 4 adds the editable bridge outlines. Versions are frozen once released.",
   "type": "object",
   "required": ["version", "layers"],
   "additionalProperties": false,
   "properties": {
-    "version": {"enum": [1, 2, 3]},
+    "version": {"enum": [1, 2, 3, 4]},
     "layers": {
       "type": "array",
       "items": {
@@ -70,6 +70,47 @@
                   "roads.geojson",
                   "settlements.geojson",
                   "transport-stops.geojson",
+                  "water.geojson"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Version 4 is listed before version 3 because the current producer takes oneOf.at(-1) as the version it emits.",
+      "properties": {
+        "version": {"const": 4},
+        "layers": {
+          "minItems": 23,
+          "maxItems": 23,
+          "items": {
+            "properties": {
+              "filename": {
+                "enum": [
+                  "border-edges.geojson",
+                  "bridges.geojson",
+                  "building-entrances.geojson",
+                  "building-labels.geojson",
+                  "buildings.geojson",
+                  "canyon-rims.geojson",
+                  "context-countries.geojson",
+                  "contours.geojson",
+                  "land.geojson",
+                  "municipalities.geojson",
+                  "places.geojson",
+                  "protected-areas.geojson",
+                  "ridges.geojson",
+                  "road-nodes.geojson",
+                  "roads.geojson",
+                  "settlement-areas.geojson",
+                  "settlements.geojson",
+                  "slopes.geojson",
+                  "summits.geojson",
+                  "transit-routes.json",
+                  "transport-stops.geojson",
+                  "turn-restrictions.json",
                   "water.geojson"
                 ]
               }
