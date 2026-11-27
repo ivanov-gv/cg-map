@@ -399,9 +399,14 @@
       "properties": {}
     },
     "ridges.geojson": {
-      "operations": ["modify"],
+      "operations": ["add", "modify", "delete"],
       "geometries": ["LineString"],
       "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["ridge"]},
+        "sunlitSide": {"requiredOnAdd": true, "maxLength": 120},
+        "shadedSide": {"requiredOnAdd": true, "maxLength": 120},
+        "summit": {"pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"},
+        "summitName": {"maxLength": 120},
         "name": {"maxLength": 120}
       }
     },

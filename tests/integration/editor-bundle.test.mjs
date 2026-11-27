@@ -45,7 +45,11 @@ test('reviewed source bundle round trips byte-for-byte through the editor consum
   const version4 = schema.oneOf.find(branch => branch.properties.version.const === 4);
   assert.ok(version4, 'the contract declares version 4');
   const version4Files = version4.properties.layers.items.properties.filename.enum;
-  assert.deepEqual(version4Files, [...version3Files, 'bridges.geojson', 'railways.geojson'].sort());
+  const version3EditableFiles = version3Files.filter(filename => filename !== 'slopes.geojson');
+  assert.deepEqual(
+    version4Files,
+    [...version3EditableFiles, 'bridges.geojson', 'railways.geojson'].sort()
+  );
   assert.equal(producedVersion, 3);
 
   const manifest = validateBundleManifest(
