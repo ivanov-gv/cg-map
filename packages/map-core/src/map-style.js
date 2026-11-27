@@ -3,6 +3,7 @@ import {inDrawingGroup} from './drawing-order.js';
 import {canyonLayers} from './canyon-layers.js';
 import {hillLabelLayers, slopeLayers} from './hill-layers.js';
 import {contourLabelLayers, contourLayers} from './contour-layers.js';
+import {railwayLabelLayers, railwayLayers} from './railway-layers.js';
 
 const source = 'basemap';
 const roadKind = ['get', 'kind'];
@@ -380,10 +381,12 @@ export function mapStyle(basemapURL, assetBaseURL) {
       ...meadowLayers(),
       ...contourLayers(),
       ...bridgeLayers(),
+      ...railwayLayers(),
       ...streetLayers(),
       ...walkingLayers(),
       ...contourLabelLayers(),
       ...labelLayers(),
+      ...railwayLabelLayers(),
       ...hillLabelLayers()
     ]
   };

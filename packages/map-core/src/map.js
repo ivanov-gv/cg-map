@@ -1,6 +1,7 @@
 import {mapStyle, installBuildingNumberScale} from './map-style.js';
 import {installSatellite} from './satellite.js';
 import {installSummitIcon} from './hill-layers.js';
+import {installRailwayIcon} from './railway-layers.js';
 
 const mapStates = new WeakMap();
 
@@ -43,8 +44,9 @@ export function createMap({engine, container, basemapURL, assetBaseURL, options 
     ...options
   });
   mapStates.set(map, 'loading');
-  // Registered before the style loads, so the first summit draw already finds its icon.
+  // Registered before the style loads, so the first summit or station draw already finds its icon.
   const stopSummitIcon = installSummitIcon(map);
+  const stopRailwayIcon = installRailwayIcon(map);
   map.addControl(new engine.NavigationControl({showCompass: false}), 'bottom-right');
   map.addControl(new engine.ScaleControl({maxWidth: 100}), 'bottom-left');
   // Resize on the next frame, once per frame, so layout settles first and no callback outlives the map.
@@ -66,6 +68,7 @@ export function createMap({engine, container, basemapURL, assetBaseURL, options 
     cancelAnimationFrame(resizeFrame);
     stopNumberScale?.();
     stopSummitIcon();
+    stopRailwayIcon();
   });
   return map;
 }
