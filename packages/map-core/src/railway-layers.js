@@ -7,8 +7,9 @@ const railwayKind = ['get', 'kind'];
 const isPlatform = ['==', railwayKind, 'platform'];
 const isPolygon = ['==', ['geometry-type'], 'Polygon'];
 const isLine = ['==', ['geometry-type'], 'LineString'];
-// Short light dashes break the darker bed into a tie pattern; a continuous light line would read as a road.
-const tieDashArray = [0.9, 1.4];
+// Short light dashes break the softer bed into fine ties. Dash lengths are multiples of the line width, so thinner
+// lines shorten the ties too; a continuous light line would read as a road.
+const tieDashArray = [0.85, 1.35];
 const disusedDashArray = [3, 2];
 const disusedOpacity = 0.55;
 export const railwayIconId = 'railway-station-symbol';
@@ -17,10 +18,10 @@ const iconPixelRatio = 2;
 const glyphColor = [255, 255, 255];
 
 const wideningWidth = stops => ['interpolate', ['exponential', 1.5], ['zoom'], ...stops];
-const trackWidth = wideningWidth([12, 1.2, 14, 2.2, 17, 5.5, 20, 20]);
-const tieWidth = wideningWidth([12, 1, 14, 1.8, 17, 4.5, 20, 17]);
-const disusedWidth = wideningWidth([12, 0.9, 14, 1.5, 17, 3.5, 20, 12]);
-const platformWidth = wideningWidth([12, 1.5, 14, 3, 17, 9, 20, 34]);
+const trackWidth = wideningWidth([12, 0.7, 14, 1.3, 17, 3.3, 20, 12]);
+const tieWidth = wideningWidth([12, 0.6, 14, 1.1, 17, 2.7, 20, 10]);
+const disusedWidth = wideningWidth([12, 0.55, 14, 0.9, 17, 2.1, 20, 7]);
+const platformWidth = wideningWidth([12, 1, 14, 2, 17, 6, 20, 22]);
 const labelSize = stops => ['interpolate', ['linear'], ['zoom'], ...stops];
 
 function railwayLineLayer({id, filter, color, width, dash, opacity}) {

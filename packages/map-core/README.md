@@ -26,11 +26,11 @@ and the full range when `height` is absent. Each outline in the `bridges` tile l
 roads of that crossing, with a dark line on its edge. Decks sit above water, canyon and ground, but below the roads that
 cross them.
 
-The `railways` tile layer draws platforms as light fills or narrow strokes, active tracks as a dark grey bed with
-lighter dashed ties, and disused tracks as one faint dashed line. Track and platform widths grow with zoom. Stations and
-halts use a generated rail badge and a name label in the labels group, with the same local font as other labels; the
-style has no sprite, so `createMap` installs the badge on demand. Railways sit above land use and bridge decks, but
-below streets.
+The `railways` tile layer draws platforms as light fills or narrow strokes, active tracks as a thin, soft grey bed with
+fine dashed ties, and disused tracks as one faint dashed line. Their greys sit near land and minor-road casings, so
+tracks recede behind streets and labels. Track and platform widths grow with zoom. Stations and halts use a generated
+rail badge and a name label in the labels group, with the same local font as other labels; the style has no sprite, so
+`createMap` installs the badge on demand. Railways sit above land use and bridge decks, but below streets.
 
 Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
 and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
