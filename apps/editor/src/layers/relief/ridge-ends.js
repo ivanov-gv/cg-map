@@ -94,3 +94,19 @@ export function slopesWithSlidEnds(line, sides) {
 
 export const hasMovedEnds = (before, after) =>
   !isSamePoint(before[0], after[0]) || !isSamePoint(before.at(-1), after.at(-1));
+
+const containsPoint = (line, point) => line.some(candidate => isSamePoint(candidate, point));
+
+// An end lies where light and shade meet the hill outline. A point further along the ridge cannot take its place
+// without leaving that outline, so taking an end away is not a corner edit but a different ridge. The editor's origins
+// say which point each position is: without them, as in a tool that replaces the line, position is all there is to go by.
+export function isEndRemoved(before, after, origins) {
+  if (!Array.isArray(after) || after.length < 2) return true;
+  if (origins) return origins[0] !== 0 || origins.at(-1) !== before.length - 1;
+  const innerPoints = before.slice(1, -1);
+  const isStartRemoved =
+    !containsPoint(after, before[0]) && innerPoints.some(point => isSamePoint(after[0], point));
+  const isLastRemoved =
+    !containsPoint(after, before.at(-1)) && innerPoints.some(point => isSamePoint(after.at(-1), point));
+  return isStartRemoved || isLastRemoved;
+}
