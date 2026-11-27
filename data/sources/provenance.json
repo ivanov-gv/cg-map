@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23565414,
+    "bytes": 23608626,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -74,6 +74,14 @@
         },
         "bytes": 717322
       },
+      "railways": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 56448,
+          "9-12": 6193
+        },
+        "bytes": 62641
+      },
       "ridges": {
         "byZoomBand": {
           "0-8": 0,
@@ -131,8 +139,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-888d081e1c70a1ca.pmtiles",
-    "sha256": "888d081e1c70a1ca55f2fd402543c249e9a280c3f8a12e45efafcb1071626c6f",
+    "file": "montenegro-e8882b5ea0e21c19.pmtiles",
+    "sha256": "e8882b5ea0e21c19a2f5fe23ad0fcea434db947a105e9bd6e229a0e7cdbc6ec7",
     "tiles": 229422
   },
   "building_details": {
@@ -170,7 +178,7 @@
     "roof:levels": 142,
     "start_date": 1
   },
-  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, country outline and water.",
+  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, settlements, municipality borders, country outline, railways and water.",
   "detail_bbox": [
     19.15,
     42.37,
@@ -241,6 +249,11 @@
       "features": 4,
       "sha256": "658f5528c5fe14e63bd2811dcfb305142c7101a4379943aea5da75824b098b3d"
     },
+    "railways.geojson": {
+      "bytes": 62929,
+      "features": 167,
+      "sha256": "d6ac41d70a2492faa77ad155e38ed9e17ecc45a508c1018ee87cef8617506033"
+    },
     "ridges.geojson": {
       "bytes": 19666,
       "features": 31,
@@ -298,6 +311,14 @@
   "places_facts_sha256": "e82f8c70b516abeeb14568547ec3f7787de29c5b80b65e69edb1106f2ab399f8",
   "places_file": "data/sources/places.geojson",
   "places_sha256": "cf9ca4f17327472d748f5eba2c86b1213cfd954b054b595d5e2d533db68677c6",
+  "railway_counts": {
+    "abandonedNodes": 0,
+    "abandonedWays": 0,
+    "disusedNodes": 0,
+    "disusedWays": 1,
+    "importedAbandoned": 0,
+    "importedDisused": 1
+  },
   "relief": {
     "buildParameters": {
       "canyonRimHeightRounding": "nearest metre, halves upward",
