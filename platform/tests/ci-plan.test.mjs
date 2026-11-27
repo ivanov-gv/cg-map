@@ -34,6 +34,38 @@ function configFixture(context, projects) {
   return root;
 }
 
+// The planner reads both lockfile revisions from git, so each fixture needs a base commit and a head commit.
+function lockfileFixture(context, baseText, headText) {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-lockfile-'));
+  context.after(() => fs.rmSync(repo, {recursive: true, force: true}));
+  const git = (...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd: repo,
+      encoding: 'utf8'
+    });
+  const writeLockfile = text => fs.writeFileSync(path.join(repo, 'package-lock.json'), text);
+  git('init', '-q', '-b', 'main');
+  writeLockfile(baseText);
+  git('add', 'package-lock.json');
+  git('commit', '-qm', 'base');
+  writeLockfile(headText);
+  git('add', 'package-lock.json');
+  git('commit', '-qm', 'head');
+  return repo;
+}
+
+function lockfileText(packages) {
+  return `${JSON.stringify({lockfileVersion: 3, packages}, null, 2)}\n`;
+}
+
+function runPlanner(repo) {
+  return execFileSync('node', [path.join(repoRoot, 'platform/tools/ci-plan.mjs'), '--base', 'HEAD~1'], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+}
+
 const cases = [
   ['docs only', ['docs/runbooks/release.md'], ['docs']],
   ['Markdown inside a component', ['apps/web/README.md', 'services/backend/README.md'], ['docs']],
@@ -184,6 +216,36 @@ test('only the root Makefile narrows the plan; other root files still select eve
     assert.equal(otherPlan.everything, true, file);
     assert.deepEqual(otherPlan.folders, FOLDERS, file);
   }
+});
+
+test('a lockfile pin bump selects its workspace and the platform pin checks', context => {
+  const editorEntry = version => ({
+    version,
+    resolved: `https://npm.pkg.github.com/download/@ivanov-gv/map-core/${version}/digest`,
+    integrity: `sha512-${version}`
+  });
+  const lockForVersion = version =>
+    lockfileText({
+      'apps/editor': {name: '@cg-map/editor', dependencies: {'@ivanov-gv/map-core': version}},
+      'apps/editor/node_modules/@ivanov-gv/map-core': editorEntry(version)
+    });
+  const summary = runPlanner(lockfileFixture(context, lockForVersion('0.2.0'), lockForVersion('0.3.0')));
+  assert.match(summary, /^Selected a subset of pipelines\.$/m, summary);
+  assert.match(summary, /^- Folders: platform, apps-editor$/m, summary);
+});
+
+test('a hoisted lockfile entry selects everything with a shared reason', context => {
+  const lockForVersion = version => lockfileText({'node_modules/eslint': {version}});
+  const summary = runPlanner(lockfileFixture(context, lockForVersion('10.0.1'), lockForVersion('10.0.2')));
+  assert.match(summary, /^Selected everything \(shared lockfile entry\)\.$/m, summary);
+  assert.ok(summary.split('\n').includes(`- Folders: ${FOLDERS.join(', ')}`), summary);
+});
+
+test('an unparsable lockfile selects everything and says why', context => {
+  const summary = runPlanner(lockfileFixture(context, lockfileText({}), '{not json\n'));
+  assert.match(summary, /^Selected everything \(lockfile parse failed\)\.$/m, summary);
+  assert.match(summary, /^::warning::Could not parse head lockfile:/m, summary);
+  assert.ok(summary.split('\n').includes(`- Folders: ${FOLDERS.join(', ')}`), summary);
 });
 
 test('the root Makefile folders match the workflows that call root make', () => {
