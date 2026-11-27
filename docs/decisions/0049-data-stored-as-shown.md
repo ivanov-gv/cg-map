@@ -25,8 +25,6 @@ previewed at once. If the Editor has a copy, the two can disagree. The owner dec
   example, moving a shared municipality border moves it in both polygons at once.
 - **One rule validates one file.** Objects that must agree live in the same file, so their check and the edit that keeps
   them consistent read one file. Cross-file validations are avoided.
-- **Each check is one JavaScript module in data, published in `@ivanov-gv/map-data`.** `check-data` runs it before a
-  release, and the Editor imports the same module for instant warnings on each edit.
 
 ## Consequences
 
@@ -34,6 +32,6 @@ previewed at once. If the Editor has a copy, the two can disagree. The owner dec
 - Municipality polygons are stored, and their shared borders are kept equal by the Editor's shared-edge edits and by a
   topology check.
 - Building labels, the sea and other derived values become stored, shown facts or style rules, as #507 lists.
-- Checks written in Python move to JavaScript, so the Editor can import them.
 - Shared borders store the same line in two polygons. The edits and the checks keep them equal; that is the accepted
   cost of instant previews without a derivation.
+- Checks stay in data, in the language they are written in. Sharing them with the Editor is left for later.
