@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {expression} from '@maplibre/maplibre-gl-style-spec';
-import {installSummitIcon, summitIconId, summitText} from '../src/hill-layers.js';
+import {installSummitIcon, summitIconId, summitText} from './hill-layers.js';
 
 // Without the icon MapLibre draws no summit triangle; other missing images belong to their own installers.
 test('the summit icon is added once, only when the style asks for it', () => {

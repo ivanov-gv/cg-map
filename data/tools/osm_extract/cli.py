@@ -22,6 +22,7 @@ from .identity import adopt_collection
 from .land import LandLayer
 from .places import PlacesLayer
 from .protected_areas import ProtectedAreasLayer
+from .railways import RailwaysLayer
 from .road_nodes import RoadNodesLayer
 from .roads import RoadsLayer
 from .settlement_areas import SettlementAreasLayer
@@ -33,7 +34,7 @@ from .writing import read_collection, write_collection
 DEFAULT_BBOX = (19.15, 42.37, 19.34, 42.51)
 COVERAGE = (
     'Whole-city Podgorica detail; Montenegro major roads, attractions, '
-    'settlements, municipality borders, country outline and water.'
+    'settlements, municipality borders, country outline, railways and water.'
 )
 # One selectable name owns every layer that contributes to a source file.
 LAYER_GROUPS = {
@@ -48,13 +49,14 @@ LAYER_GROUPS = {
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
     'protected-areas': (ProtectedAreasLayer,),
+    'railways': (RailwaysLayer,),
 }
 # Country geometry is finalised before borders clip municipalities to land;
 # settlements then use those areas to assign their municipality. Water and
 # places finish last with the reviewed outline and building footprints.
 FINISH_ORDER = (
-    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places',
-    'protected-areas'
+    'buildings', 'roads', 'railways', 'land', 'borders', 'settlements',
+    'water', 'places', 'protected-areas'
 )
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
@@ -250,7 +252,10 @@ def layer_checksum(root, filename):
     }
 
 
-def updated_provenance(root, options, filenames, input_hash, is_partial, details=None):
+def updated_provenance(
+    root, options, filenames, input_hash, is_partial, details=None,
+    railway_counts=None
+):
     """Update generated file inventory; full runs also record their input."""
     provenance = read_provenance(root)
     if not is_partial:
@@ -264,6 +269,8 @@ def updated_provenance(root, options, filenames, input_hash, is_partial, details
         provenance['building_details'] = {
             **provenance.get('building_details', {}), **details
         }
+    if railway_counts is not None:
+        provenance['railway_counts'] = railway_counts
     if not is_partial:
         provenance.update({
             'export_date': options.source_date,
@@ -503,9 +510,12 @@ def run(args):
             )
         detail_groups = {'buildings', 'places'} & selected_groups
         details = dict(state.building_counts) if detail_groups else None
+        railway_counts = (
+            dict(state.railway_counts) if 'railways' in selected_groups else None
+        )
         updated_provenance(
             staging_root, staged_options, written_filenames, input_hash,
-            is_partial, details
+            is_partial, details, railway_counts
         )
         publish_sources(
             staged_sources, sources_directory, published_filenames

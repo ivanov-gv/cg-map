@@ -1060,6 +1060,116 @@ export function validateRoads(data, {contractsDirectory} = {}) {
   return count;
 }
 
+// Railway facts are copied from the reviewed PBF. The kinds and tags below are the extractor's
+// RAILWAY_KINDS and RAILWAY_TAGS (osm_extract/railways.py); a data test keeps the lists equal.
+export const railwayKinds = new Set([
+  'abandoned_halt', 'abandoned_light_rail', 'abandoned_narrow_gauge',
+  'abandoned_platform', 'abandoned_rail', 'abandoned_station',
+  'disused_halt', 'disused_light_rail', 'disused_narrow_gauge',
+  'disused_platform', 'disused_rail', 'disused_station',
+  'halt', 'light_rail', 'narrow_gauge', 'platform', 'rail', 'station'
+]);
+export const railwayTags = new Set([
+  'railway=rail', 'railway=narrow_gauge', 'railway=light_rail',
+  'railway=platform', 'public_transport=platform+train=yes',
+  'railway=station', 'railway=halt',
+  'abandoned:railway=rail', 'abandoned:railway=narrow_gauge',
+  'abandoned:railway=light_rail', 'abandoned:railway=platform',
+  'abandoned:railway=station', 'abandoned:railway=halt',
+  'disused:railway=rail', 'disused:railway=narrow_gauge',
+  'disused:railway=light_rail', 'disused:railway=platform',
+  'disused:railway=station', 'disused:railway=halt'
+]);
+const railwayTrackKinds = new Set([
+  'rail', 'narrow_gauge', 'light_rail',
+  'abandoned_rail', 'abandoned_narrow_gauge', 'abandoned_light_rail',
+  'disused_rail', 'disused_narrow_gauge', 'disused_light_rail'
+]);
+const railwayStationKinds = new Set([
+  'station', 'halt', 'abandoned_station', 'abandoned_halt',
+  'disused_station', 'disused_halt'
+]);
+const railwayPlatformKinds = new Set([
+  'platform', 'abandoned_platform', 'disused_platform'
+]);
+const activeRailwayTags = new Map([
+  ['rail', new Set(['railway=rail'])],
+  ['narrow_gauge', new Set(['railway=narrow_gauge'])],
+  ['light_rail', new Set(['railway=light_rail'])],
+  ['platform', new Set(['railway=platform', 'public_transport=platform+train=yes'])],
+  ['station', new Set(['railway=station'])],
+  ['halt', new Set(['railway=halt'])]
+]);
+
+function expectedRailwayTags(kind) {
+  const lifecycle = /^(disused|abandoned)_(.+)$/.exec(kind);
+  if (!lifecycle) return activeRailwayTags.get(kind) ?? new Set();
+  return new Set([`${lifecycle[1]}:railway=${lifecycle[2]}`]);
+}
+
+function railwayTextFields(properties, label) {
+  for (const field of ['name', 'name:en', 'ref', 'gauge']) {
+    const value = properties[field];
+    if (value === undefined) continue;
+    requireValue(
+      typeof value === 'string' && value.trim().length > 0 && value.length <= 128,
+      `${label}: invalid ${field}`
+    );
+  }
+}
+
+export function validateRailways(data, {label = 'railways.geojson', requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {
+    label,
+    geometryTypes: ['Point', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'],
+    requireKind: true,
+    requireAdopted,
+    contractsDirectory,
+    requireRfc7946Rings: true,
+    ringKinds: railwayPlatformKinds
+  });
+  for (const [index, feature] of data.features.entries()) {
+    const name = `${label} feature ${index}`;
+    const {kind, osmTag} = feature.properties;
+    requireValue(railwayKinds.has(kind), `${name}: unsupported railway kind ${kind}`);
+    requireValue(railwayTags.has(osmTag), `${name}: unsupported osmTag ${osmTag}`);
+    requireValue(expectedRailwayTags(kind).has(osmTag), `${name}: osmTag disagrees with kind ${kind}`);
+    let expectedGeometries = ['LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'];
+    if (railwayTrackKinds.has(kind)) expectedGeometries = ['LineString', 'MultiLineString'];
+    if (railwayStationKinds.has(kind)) expectedGeometries = ['Point'];
+    requireValue(expectedGeometries.includes(feature.geometry.type), `${name}: geometry type violates railway kind ${kind}`);
+    railwayTextFields(feature.properties, name);
+  }
+  return count;
+}
+
+// Candidate counts describe what reached the detail box; imported counts describe distinct source objects.
+export function validateRailwayCounts(counts, railways) {
+  requireValue(counts && typeof counts === 'object', 'railway_counts missing from provenance');
+  for (const name of [
+    'disusedWays', 'abandonedWays', 'disusedNodes', 'abandonedNodes',
+    'importedDisused', 'importedAbandoned'
+  ]) {
+    requireValue(Number.isSafeInteger(counts[name]) && counts[name] >= 0, `railway_counts.${name}: invalid count`);
+  }
+  const imported = {disused: new Set(), abandoned: new Set()};
+  for (const {properties} of railways.features) {
+    for (const status of Object.keys(imported)) {
+      if (properties.kind.startsWith(`${status}_`)) imported[status].add(properties.entityId);
+    }
+  }
+  for (const [status, label] of [['disused', 'Disused'], ['abandoned', 'Abandoned']]) {
+    requireValue(
+      counts[`imported${label}`] === imported[status].size,
+      `railway_counts.imported${label}: count differs from railways.geojson`
+    );
+    requireValue(
+      counts[`imported${label}`] <= counts[`${status}Ways`] + counts[`${status}Nodes`],
+      `railway_counts.imported${label}: more objects published than found in the detail box`
+    );
+  }
+}
+
 // Named protected areas carry names for the map, not land cover: one kind, a name and the OSM tag that selected them.
 // The tags are the extractor's PROTECTED_AREA_TAGS (osm_extract/protected_areas.py); a data test keeps them equal.
 export const protectedAreaTags = new Set(['leisure=nature_reserve', 'boundary=protected_area', 'boundary=national_park']);
@@ -1145,6 +1255,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     'ridges.geojson': validateReliefSource,
     'canyon-rims.geojson': validateReliefSource,
     'protected-areas.geojson': validateProtectedAreas,
+    'railways.geojson': validateRailways,
   };
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+(\.geojson|\.json)$/.test(name), 'Unsafe provenance layer path');
@@ -1178,6 +1289,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     }
   }
   const readSource = name => JSON.parse(fs.readFileSync(path.join(root, 'data/sources', name)));
+  validateRailwayCounts(provenance.railway_counts, readSource('railways.geojson'));
   validateSettlementsOfAreas(readSource('settlement-areas.geojson'), readSource('settlements.geojson'));
   // Validate roads specifically (pathClass, graph nodes, levels)
   const roadsPath = path.join(root, 'data/sources/roads.geojson');

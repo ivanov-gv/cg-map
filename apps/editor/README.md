@@ -1,7 +1,15 @@
 # Internal layer editor
 
-A separately built real-map source editor, using the published `@ivanov-gv/map-core` package, like the public app. It
-changes nothing by itself: edits stay in the browser until exported as a changeset for the data-owned importer.
+A separately built real-map source editor on `@ivanov-gv/map-core`, like the public app. Non-release builds bundle the
+core of this commit; a release bundles the exact pinned version. It changes nothing by itself: edits stay in the browser
+until exported as a changeset for the data-owned importer.
+
+## Build inputs
+
+`build`, `dev`, `lan`, the CI artifact and the dev Pages site take core, data and contracts from the checked-out commit.
+`make -C apps/editor build-release` takes the exact versions pinned in `package.json` and refuses any other core.
+Automated tests and the browser suite keep their pins, so a change in core cannot change a test without a pin bump
+([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)).
 
 Run `make -C apps/editor dev` and open the printed local URL. The standalone artifact is `dist/editor`; it is never
 included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest
@@ -27,9 +35,10 @@ draft, changeset and review state, `inspector/` owns the property panel, `geomet
 holds each layer with `layers/shared/` for the registry and shared layer UI, `source-data/` loads the verified bundle,
 `map-tools/` holds map interaction tools, `offline/` keeps the local copy while `sw.js` stays at `src/` root for
 service-worker scope, and `shared/` holds small DOM and hash helpers. Unit tests go next to their source as `*.test.js`;
-tests that span sources and whole-app tests stay in `tests/`; tool tests stay in `tools/`; `npm test` skips
-`*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules; `npm run lint` covers the source
-folders, tools, tests, both app configs and that config itself.
+browser cases that need only a component go next to it as `*.browser.test.js` and use the harness in `tests/e2e/support`
+without starting `app.js`. Whole-app journeys live in `e2e/`; tests that span sources stay in `tests/`; tool tests stay
+in `tools/`; `npm test` skips `*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules;
+`npm run lint` covers the source folders, tools, tests, `e2e/`, both app configs and that config itself.
 
 ## Layers
 
@@ -85,8 +94,8 @@ own files.
 
 A property whose rule lists its values is picked from a list, and so is a small range of whole numbers. A free one that
 usually says the same things, such as floors, road numbers or the streets around, offers those with Other…
-([usual-values.js](src/inspector/usual-values.js)). Names, contacts, house numbers and heights are typed. A test keeps
-every property in one of these groups.
+([usual-values.js](src/inspector/usual-values.js)). Names, contacts, house numbers, entrance numbers and heights are
+typed. A test keeps every property in one of these groups.
 
 Move, Edit corners and drawing are modes: the inspector shrinks to one bar with Done, and the original shape stays as a
 thin dashed ghost until Apply. Whatever goes along with it, such as the roads of a moved junction, is shown in red where
@@ -233,7 +242,7 @@ on any mismatch. Apply it with `make -C data apply-changeset CHANGESET=<absolute
 
 Local `make verify PKG=apps/editor` and `make -C apps/editor e2e` after runtime changes are optional for iterating; the
 pre-push `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge.
-tests/e2e covers both URL prefixes. Sources and their provenance stay with data; the bundle contract lives in
+The browser suite covers both URL prefixes. Sources and their provenance stay with data; the bundle contract lives in
 packages/contracts. This app has no editorial API.
 
 The default preview uses a separate deterministic port/origin from the public app, preserving that app's service worker

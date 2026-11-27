@@ -96,6 +96,7 @@ already shows.
 | land              | `land.geojson`                                      | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                                      |
 | water             | `water.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                                           |
 | roads             | `roads.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel`, `inGreenArea` |
+| railways          | `railways.geojson`                                  | 12–17                                         | `kind`, `name`, `name:en`, `ref`                                                                                              |
 | buildings         | `buildings.geojson`                                 | 13–17                                         | `kind`, `building:levels`                                                                                                     |
 | contours          | `contours.geojson`                                  | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
 | slopes            | `slopes.geojson`                                    | 12–17                                         | `aspect`                                                                                                                      |
@@ -125,6 +126,23 @@ A rebuild writes a new content-hash archive and `data/artifacts/release.json`. R
 and that release file, update the `archive` block of `data/sources/provenance.json` to match, and remove the superseded
 `.pmtiles` from `data/artifacts` in the same change. `make -C data check` compares the reviewed archive with those
 facts.
+
+## Railways
+
+`railways.geojson` comes from the reviewed PBF with `--layers railways`; that partial run replaces only this source and
+its layer checksum and lifecycle counts in provenance:
+
+```sh
+python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers railways \
+  --source-url https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf \
+  --source-date 2026-11-21
+```
+
+Inside the detail box the extractor publishes `railway=rail|narrow_gauge|light_rail` lines, station and halt nodes from
+`railway=station|halt`, and platform ways selected from `railway=platform` or `public_transport=platform` with
+`train=yes`. Disused and abandoned objects keep their status in the published kind, and provenance records candidate and
+imported counts for both states, including zeros. Features keep their OSM identity and version. The source is staged
+display geometry: it is not in the version-2 editor bundle until a later step adds an editor mode.
 
 The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
 an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a
@@ -188,15 +206,15 @@ data/tools/extract-osm.py replaces places.geojson and then reapplies the policy,
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
-municipalities.geojson), `settlements`, `places`, and `protected-areas` (protected-areas.geojson); each group replaces
-only its own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails
-and asks for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and
-supplies footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups
-together when refreshing either side of that join; this Feature does not refresh places, so the published snapshot has
-no such joins. A `borders` run uses reviewed `land.geojson` as its country outline; a `settlements` run uses reviewed
-`municipalities.geojson` to assign each point. Run them together when refreshing either source.
-`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
-policy, then review the new facts as above.
+municipalities.geojson), `settlements`, `places`, `protected-areas` (protected-areas.geojson), and `railways`
+(railways.geojson); each group replaces only its own source files. A partial run must use the PBF whose SHA-256 is in
+provenance.json; a different input fails and asks for a full extract. The `buildings` group writes both
+`buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places` group in the same
+run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that join; this Feature
+does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed `land.geojson` as
+its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point. Run them together
+when refreshing either source. `context-countries.geojson` is a preserved input to the land and water layers, refreshed
+only on a full run. Fix the policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the

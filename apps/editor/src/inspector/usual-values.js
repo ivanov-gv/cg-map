@@ -52,7 +52,7 @@ const years = () => numbersFrom(firstYear, new Date().getFullYear()).toReversed(
 // By file and property: what is offered beside "Other…".
 const usualValues = {
   'places.geojson': {level: floors},
-  'building-entrances.geojson': {level: floors, ref: usedIn('building-entrances.geojson', 'ref')},
+  'building-entrances.geojson': {level: floors},
   'buildings.geojson': {
     'building:levels': () => numbersFrom(1, highestFloor),
     'roof:levels': () => numbersFrom(0, 5),
@@ -67,8 +67,9 @@ export function usualValuesOf(filename, feature, context) {
   return Object.fromEntries(fields.map(([name, valuesOf]) => [name, valuesOf(feature, context)]));
 }
 
-// What is different for nearly every object, so that a list would only be in the way: names, contacts, numbers of houses,
-// links to other works, and heights.
+// What is different for nearly every object, so that a list would only be in the way: names, contacts, numbers of houses
+// and entrances, links to other works, and heights. A name is typed unless its file lists usual values, which is why
+// road numbers keep their list.
 const typedNames = new Set([
   'name',
   'name:en',
@@ -81,7 +82,8 @@ const typedNames = new Set([
   'wikidata',
   'wikipedia',
   'ele',
-  'number'
+  'number',
+  'ref'
 ]);
 
 export const isTyped = (filename, name) => typedNames.has(name) && !usualValues[filename]?.[name];

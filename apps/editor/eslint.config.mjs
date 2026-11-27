@@ -11,6 +11,7 @@ const nodeFiles = [
   'tools/**/*.js',
   'tests/**/*.mjs',
   'tests/**/*.js',
+  'e2e/**/*.js',
   'playwright.config.mjs',
   'eslint.config.mjs'
 ];

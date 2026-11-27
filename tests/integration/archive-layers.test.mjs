@@ -28,6 +28,7 @@ const existingLayers = new Set(['land', 'water', 'roads', 'buildings']);
 const optionalFieldsByLayer = new Map([
   ['canyon_rims', new Set(['width'])],
   ['summits', new Set(['name:en'])],
+  ['railways', new Set(['name:en', 'ref'])],
   ['road_nodes', new Set(['name'])],
   ['entrances', new Set(['ref', 'level', 'door', 'wheelchair'])]
 ]);

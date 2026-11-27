@@ -136,6 +136,21 @@ for (const application of ['apps/core-demo']) {
     assert.ok(output.includes(path.basename(probe)), output);
     assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
   });
+
+  test(`${application} repo boundary rejects repository data paths in test and spec files`, t => {
+    for (const directory of ['src', 'tools', 'e2e']) {
+      const directoryPath = path.join(repoRoot, application, directory);
+      if (!fs.existsSync(directoryPath)) continue;
+      const probe = path.join(directoryPath, `__data-probe-${process.pid}.test.mjs`);
+      t.after(() => fs.rmSync(probe, {force: true}));
+      fs.writeFileSync(probe, "export const source = '../../../data/sources/places.geojson';\n");
+      const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+      assert.notEqual(result.status, 0, `${probe} must be refused`);
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+      assert.ok(output.includes(path.basename(probe)), output);
+      assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
+    }
+  });
 }
 
 test('integration repo boundary rejects repository data paths outside the shared helper', t => {

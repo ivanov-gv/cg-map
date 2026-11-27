@@ -15,6 +15,18 @@ export async function centreOn(page, [east, north], zoom = 19) {
   );
 }
 
+// Level and filter changes repaint asynchronously; wait before tapping the newly drawn features.
+export function waitForRepaint(page) {
+  return page.evaluate(
+    () =>
+      new Promise(resolve => {
+        const {map} = window.editorDebug;
+        map.once('idle', resolve);
+        map.triggerRepaint();
+      })
+  );
+}
+
 export async function chooseLayer(page, layerId, position = [0, 0], zoom = 19) {
   await centreOn(page, position, zoom);
   const layers = page.getByRole('button', {name: 'Layers', exact: true});

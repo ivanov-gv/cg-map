@@ -21,6 +21,7 @@ sys.path.insert(0, str(TOOLS))
 from osm_extract import ExtractionState, cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
 from osm_extract.protected_areas import protected_area_tag  # noqa: E402
+from osm_extract.railways import RAILWAY_KINDS, RAILWAY_TAGS  # noqa: E402
 from osm_extract.roads import classify_path, road_level  # noqa: E402
 from osm_extract.settlements import (  # noqa: E402
     NEAREST_MUNICIPALITY_LIMIT_DEGREES, SettlementsLayer, municipality_at,
@@ -72,6 +73,7 @@ GENERATED_FILES = (
     'places.geojson',
     'protected-areas.geojson',
     'provenance.json',
+    'railways.geojson',
     'road-nodes.geojson',
     'roads.geojson',
     'settlement-areas.geojson',
@@ -94,8 +96,9 @@ REVIEWED_GEOJSON = (
     'border-edges.geojson', 'building-entrances.geojson',
     'building-labels.geojson', 'buildings.geojson',
     'context-countries.geojson', 'land.geojson', 'municipalities.geojson',
-    'places.geojson', 'road-nodes.geojson', 'roads.geojson',
-    'settlement-areas.geojson', 'settlements.geojson', 'transport-stops.geojson', 'water.geojson',
+    'places.geojson', 'railways.geojson', 'road-nodes.geojson',
+    'roads.geojson', 'settlement-areas.geojson', 'settlements.geojson',
+    'transport-stops.geojson', 'water.geojson',
 )
 LAYER_FILES = {
     'buildings': ('building-entrances.geojson', 'buildings.geojson'),
@@ -106,6 +109,7 @@ LAYER_FILES = {
     'water': ('water.geojson',),
     'places': ('places.geojson',),
     'protected-areas': ('protected-areas.geojson',),
+    'railways': ('railways.geojson',),
 }
 COVERED_SEA = {
     'type': 'Polygon',
@@ -367,6 +371,17 @@ class OsmExtractTest(unittest.TestCase):
             ('node/9304', None): 1,
             ('node/9305', None): 1,
             ('node/9307', None): 1,
+            ('node/9501', None): 5,
+            ('node/9502', None): 2,
+            ('node/9503', None): 1,
+            ('node/9504', None): 1,
+            ('way/9501', None): 3,
+            ('way/9502', None): 2,
+            ('way/9503', None): 4,
+            ('way/9504', None): 1,
+            ('way/9505', None): 1,
+            ('way/9510', None): 7,
+            ('way/9511', None): 2,
         }
         for key, version in expected.items():
             with self.subTest(key=key):
@@ -1000,6 +1015,91 @@ class OsmExtractTest(unittest.TestCase):
             after['buildings.geojson'], before['buildings.geojson']
         )
         self.assertEqual(after['roads.geojson'], before['roads.geojson'])
+
+
+class RailwayLayerTest(unittest.TestCase):
+    """Tracks, platforms and stations keep OSM identity inside the detail box."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-railways-'
+        )
+        self.addCleanup(temporary.cleanup)
+        self.root = prepared_root(Path(temporary.name) / 'root')
+        extract(self.root, layers=['railways'])
+
+    def test_tracks_platforms_and_stations_keep_osm_facts(self):
+        grouped = features_by_entity_id(self.root, 'railways.geojson')
+        published = {
+            'node/9501': ('station', 'railway=station', 5, 'Point'),
+            'node/9502': ('halt', 'railway=halt', 2, 'Point'),
+            'node/9503': (
+                'disused_halt', 'disused:railway=halt', 1, 'Point'
+            ),
+            'node/9504': (
+                'abandoned_station', 'abandoned:railway=station', 1, 'Point'
+            ),
+            'way/9501': ('rail', 'railway=rail', 3, 'LineString'),
+            'way/9502': (
+                'narrow_gauge', 'railway=narrow_gauge', 2, 'LineString'
+            ),
+            'way/9503': (
+                'light_rail', 'railway=light_rail', 4, 'LineString'
+            ),
+            'way/9504': (
+                'disused_rail', 'disused:railway=rail', 1, 'LineString'
+            ),
+            'way/9505': (
+                'abandoned_rail', 'abandoned:railway=rail', 1, 'LineString'
+            ),
+            'way/9510': ('platform', 'railway=platform', 7, 'Polygon'),
+            'way/9511': (
+                'platform', 'public_transport=platform+train=yes',
+                2, 'LineString'
+            ),
+        }
+        self.assertEqual(set(grouped), set(published))
+        for entity_id, facts in published.items():
+            kind, osm_tag, version, geometry_type = facts
+            with self.subTest(entity_id=entity_id):
+                feature = single_feature(grouped, entity_id)
+                properties = feature['properties']
+                self.assertEqual(properties['kind'], kind)
+                self.assertEqual(properties['osmTag'], osm_tag)
+                self.assertEqual(properties['entityVersion'], version)
+                self.assertEqual(feature['geometry']['type'], geometry_type)
+                self.assertIn(kind, RAILWAY_KINDS)
+                self.assertIn(osm_tag, RAILWAY_TAGS)
+        central = single_feature(grouped, 'node/9501')['properties']
+        assert_osm_names(self, central, 'Test Central', 'Test Central EN')
+        self.assertEqual(central['ref'], 'TC')
+        track = single_feature(grouped, 'way/9501')['properties']
+        assert_osm_names(self, track, 'Test Rail')
+        self.assertEqual(track['gauge'], '1435')
+        train_platform = single_feature(grouped, 'way/9511')['properties']
+        assert_osm_names(self, train_platform, 'Train Platform')
+        area_platform = single_feature(grouped, 'way/9510')['properties']
+        self.assertEqual(area_platform['ref'], '1')
+        self.assertNotIn('name', area_platform)
+        ring_groups = polygon_rings(
+            single_feature(grouped, 'way/9510')['geometry']
+        )
+        self.assertTrue(LinearRing(ring_groups[0][0]).is_ccw)
+        for entity_id in ('node/9505', 'way/9506', 'way/9512', 'way/9513'):
+            with self.subTest(entity_id=entity_id, excluded=True):
+                self.assertNotIn(entity_id, grouped)
+
+    def test_lifecycle_candidates_and_imports_are_recorded(self):
+        path = self.root / 'data/sources/provenance.json'
+        counts = json.loads(path.read_text(encoding='utf-8'))['railway_counts']
+        self.assertEqual(counts, {
+            'abandonedNodes': 1,
+            'abandonedWays': 1,
+            'disusedNodes': 1,
+            'disusedWays': 1,
+            'importedAbandoned': 2,
+            'importedDisused': 2,
+        })
 
 
 class ProtectedAreaTagTest(unittest.TestCase):
