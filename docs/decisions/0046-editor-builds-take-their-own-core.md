@@ -46,3 +46,14 @@ existing HEAD default outside tests and releases. Core-demo pins workspace `0.0.
 environment, so the pin and the repository path name the same core until a release is published — the explicit pin path
 still makes the release declaration checkable. Automated tests keep reading pins, and the reason is the same as for
 Editor and Web, so this needs no new decision record.
+
+## Outcome: Platform has no package split of its own (2026-11-27, #424)
+
+Platform's only build that resolves other projects is `make -C platform build-web`, which its CI verify runs for hosting
+tests. It sets `MAP_DATA_ROOT` and `MAP_CONTRACTS_ROOT` from platform's own `tools/pinned-data-root.mjs` and
+`tools/pinned-contracts-root.mjs`, then calls Web's `build-pinned-core` target so Web supplies its own core pin. The dev
+Pages site is assembled by ci-publish from each app's plain `build` target; `platform/pages/Dockerfile` only copies that
+site and `tools/serve.py` only serves an existing artifact. Platform has no release build of its own, and its manifest
+pins `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts`, so tests resolve installed packages outside repository
+sources. No code change is needed here; selecting consumer pipelines when a producer changes remains a separate step of
+issue 424.
