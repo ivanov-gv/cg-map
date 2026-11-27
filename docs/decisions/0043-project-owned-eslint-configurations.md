@@ -104,3 +104,17 @@ the shared probe helper against its own config. A project's config selects that 
   their globals, that long tests keep the exception, and that journey paths still reject readability violations.
 - With the Editor migration (#478, merged in #473) on main, the consumers are the six non-app projects, apps/editor and
   apps/core-demo. Only apps/web still uses the root file.
+
+### Outcome note: Web migration (2026-11-27)
+
+- Task #456 gives apps/web its own `eslint.config.mjs`. It consumes the shared exports and keeps the root config's
+  globals and rules for every file Web lints: browser and vendored globals for runtime, worker globals and a script
+  source type for `src/sw.js`, Node and browser globals for tools and tests, the runtime import boundary, the four pure
+  modules, both mechanical rule sets and the 80-line production/tool budget. The documented exception lets long linear
+  `*.test.js` scenarios exceed that budget. No existing file loses a rule.
+- `npm run lint` now runs `eslint .` from apps/web and then Web's runtime module guards. A Web-owned test lints samples
+  through that real config at nested runtime, tool, unit-test and browser-test paths, so Web proves its own patterns
+  without changing Platform's root-config probe.
+- The root `eslint.config.mjs` remains while repository-level files and the pre-commit fallback still use it. Its
+  retirement, Platform's probe move and the planner narrowing are a separate follow-up, so this change selects only
+  Web's browser suite among the apps.
