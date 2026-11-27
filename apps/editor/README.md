@@ -17,11 +17,12 @@ place to install it from. It has no access control, and its data is already publ
 
 The build assembles every reviewed source file of bundle version 3 through data-owned tooling. The editor also accepts
 versions 1 and 2 from older reviewed bundles, and version 4: version 3 plus `bridges.geojson` and `railways.geojson`,
-without the derived `slopes.geojson`. The producer still emits version 3, so a version 4 bundle is read only when one is
-published. It verifies the manifest version, filenames, byte sizes, SHA-256 and feature counts before enabling source
-modes. Hashes bind revision-local indices; they are not invented upstream IDs. Selecting a feature reads full source
-geometry/properties, never simplified tiles. Unknown properties, provenance and any source feature ID are displayed
-unchanged. Source files are never written. Hashing needs a secure context, so anything but `localhost` must use HTTPS.
+with slope faces derived in the app instead of published as `slopes.geojson`. The producer still emits version 3, so a
+version 4 bundle is read only when one is published. It verifies the manifest version, filenames, byte sizes, SHA-256
+and feature counts before enabling source modes. Hashes bind revision-local indices; they are not invented upstream IDs.
+Selecting a feature reads full source geometry/properties, never simplified tiles. Unknown properties, provenance and
+any source feature ID are displayed unchanged. Source files are never written. Hashing needs a secure context, so
+anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
 The current-layer button also opens Layers. Select an object to open the inspector, on the right or as a bottom sheet.
@@ -76,8 +77,11 @@ What the layers do beyond shape and fields:
   when either side moves; moving the coastline moves the sea, the country, its border and the municipalities.
 - **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it. In bundles
   with `slopes.geojson`, a ridge recolours the slopes beside it and its ends slide along the outline of its hill; an end
-  cannot be removed, only moved there. Version 4 has no slopes file, so moving a ridge neither recolours anything nor
-  slides its ends. Ridges are derived edges between slopes, so they cannot be added or deleted here.
+  cannot be removed, only moved there. A version 4 bundle has no slopes file, so the desktop offers Draw ridge there. A
+  ridge lies in one green area, each end touches that area's outline or another ridge, and a moved end slides to the
+  nearest such place. Applying the ridge derives its two slope faces from the ridge and the configured sun, then draws
+  them as a preview: sunlit and shaded faces, with flat and tiny faces left out. Changes record the ridge alone; derived
+  faces are never session edits or changeset files. A green area without ridges stays unshaded.
 - **Settlements & borders:** a settlement says its type and opens its area, or draws one. A border changes both sides at
   once. Its ends stay, because more than two municipalities meet there. The coast is moved on Water.
 - **Stops** go to the side of the road that is clicked and follow the road when moved.
@@ -170,8 +174,8 @@ measure a phone, or edits and export at these sizes.
 ### Limits
 
 - Changed files are not a rebuild: see above. The importer says when tiles need one.
-- A version 4 bundle has no slopes file. Moving a ridge changes the ridge alone; recolouring the derived slopes is not
-  possible there, and adding or deleting a ridge stays a later step.
+- Derived slope faces in a version 4 bundle are a preview, not a source file. Export records only ridge operations; the
+  producer derives `slopes.geojson` when it next builds a reviewed bundle.
 - Routes have no identity of their own in the data, so a changeset that edits one needs the exact snapshot.
 - Zoom levels of towns and summits, energy classes and stop turn points are recorded but not yet drawn by map-core.
 - A border or coastline edit needs `make -C data check-topology` after it is applied. A coastline that the sea, the

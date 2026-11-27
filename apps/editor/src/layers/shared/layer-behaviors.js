@@ -28,6 +28,8 @@ import {kindLabel, objectName} from './object-names.js';
 //   prepared(feature, context, edit)            the feature as Apply will record it
 //   problem(change, context)                    why Apply must refuse it, or null
 //   companionEdits(change, context)             edits of linked files that belong to it, [{filename, key, after}]
+//   derivedPreviews(context)                    preview features by filename, {[filename]: features}; these files are
+//                                               drawn from the hook, never from the session's own edits
 //   record({key, feature}, context)             keeps the object somewhere else than in a source file
 //   applyLabel(edit)                            what Apply is called
 //   afterApply(entry, context)                  what happens once the edit is recorded
@@ -58,6 +60,7 @@ const defaultBehavior = (filename, layerId) => ({
   prepared: feature => feature,
   problem: () => null,
   companionEdits: () => [],
+  derivedPreviews: () => ({}),
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
   controls: () => ({}),
@@ -172,6 +175,15 @@ const drawChoices = {
       isDesktopOnly: true
     },
     {
+      label: 'Draw ridge',
+      filename: 'ridges.geojson',
+      shape: 'LineString',
+      properties: {kind: 'ridge'},
+      // Version 4 derives slopes from ridges. Earlier bundles publish slopes and cannot add a ridge to them.
+      needsAbsentFile: 'slopes.geojson',
+      isDesktopOnly: true
+    },
+    {
       label: 'Add summit',
       filename: 'summits.geojson',
       shape: 'Point',
@@ -232,11 +244,12 @@ const drawChoices = {
   ]
 };
 
-// Only what the rules of the file allow to add.
-export function drawChoicesOf(layer, rules) {
-  return (drawChoices[layer?.id] ?? []).filter(
-    ({filename}) => layer.files.includes(filename) && rules.layers[filename].operations.includes('add')
-  );
+// Only what the rules of the file allow to add, and what the opened bundle can carry.
+export function drawChoicesOf(layer, rules, {hasFile = () => true} = {}) {
+  return (drawChoices[layer?.id] ?? []).filter(choice =>
+    layer.files.includes(choice.filename) &&
+    rules.layers[choice.filename].operations.includes('add') &&
+    (!choice.needsAbsentFile || !hasFile(choice.needsAbsentFile)));
 }
 
 // A new object states its own identity where the contract asks for it: a place and a stop carry their local ID.

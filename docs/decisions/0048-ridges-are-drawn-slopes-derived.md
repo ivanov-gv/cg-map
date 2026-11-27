@@ -33,3 +33,12 @@ added or deleted (#486). The owner chose ridges as drawn facts (2026-11-26) and 
 - Where a green area has no ridge today, it stays flat until the owner draws one, which matches the map as it is now.
 - The contract (`ridges.geojson` with add, modify and delete) changes in a contracts release, so the Editor pins it.
 - The Editor's direct slope editing goes away.
+
+## Outcome note (2026-11-27)
+
+The lead's step order for #490 lands the Editor before the data branch, so the Editor cannot yet consume the data-owned
+derivation. Step 3 ports `data/tools/relief/slope_faces.py` to `apps/editor/src/layers/relief/slope-faces.js` with only
+standard-library geometry. The port is limited to the working preview: it writes no source and adds no runtime
+dependency. Fixed cases in `apps/editor/tests/fixtures/slope-faces.json` pin its faces, aspects and areas. Step 4 keeps
+the Python derivation authoritative and moves the cases into the data-owned shared fixture; the Editor then reads them
+from its pin. This records the narrow exception without changing the one-module rule above.

@@ -1,0 +1,63 @@
+{
+  "description": "Fixed cases for parity with the published relief derivation.",
+  "green": {
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]
+  },
+  "metresPerDegree": [1, 1],
+  "cases": [
+    {
+      "name": "a horizontal ridge has a sunlit south face and a shaded north face",
+      "ridges": [[[0, 5], [10, 5]]],
+      "expected": [
+        {"aspect": "sunlit", "centroid": [5, 2.5], "areaSquareMetres": 50},
+        {"aspect": "shaded", "centroid": [5, 7.5], "areaSquareMetres": 50}
+      ]
+    },
+    {
+      "name": "a reversed horizontal ridge keeps each face on the same side of the sun",
+      "ridges": [[[10, 5], [0, 5]]],
+      "expected": [
+        {"aspect": "sunlit", "centroid": [5, 2.5], "areaSquareMetres": 50},
+        {"aspect": "shaded", "centroid": [5, 7.5], "areaSquareMetres": 50}
+      ]
+    },
+    {
+      "name": "a northern sun flips the faces",
+      "azimuthDegrees": 0,
+      "ridges": [[[0, 5], [10, 5]]],
+      "expected": [
+        {"aspect": "shaded", "centroid": [5, 2.5], "areaSquareMetres": 50},
+        {"aspect": "sunlit", "centroid": [5, 7.5], "areaSquareMetres": 50}
+      ]
+    },
+    {
+      "name": "a sloping ridge splits the area by the side of the ridge, not its direction",
+      "ridges": [[[0, 0], [10, 6]]],
+      "expected": [
+        {"aspect": "sunlit", "centroid": [6.666667, 2], "areaSquareMetres": 30},
+        {"aspect": "shaded", "centroid": [4.285714, 6.285714], "areaSquareMetres": 70}
+      ]
+    },
+    {
+      "name": "a dangling ridge next to a boundary ridge leaves the boundary faces alone",
+      "ridges": [[[0, 5], [10, 5]], [[4, 1], [6, 1]]],
+      "expected": [
+        {"aspect": "sunlit", "centroid": [5, 2.5], "areaSquareMetres": 50},
+        {"aspect": "shaded", "centroid": [5, 7.5], "areaSquareMetres": 50}
+      ]
+    },
+    {
+      "name": "a ridge that does not reach the outline leaves the rest flat",
+      "ridges": [[[4, 1], [6, 1]]],
+      "expected": [
+        {"aspect": null, "centroid": [5, 5], "areaSquareMetres": 100}
+      ]
+    },
+    {
+      "name": "an area without ridges has no slope face",
+      "ridges": [],
+      "expected": []
+    }
+  ]
+}

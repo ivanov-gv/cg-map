@@ -152,6 +152,9 @@ function layerStatus() {
 // Kinds that only follow from other objects, and files another layer edits, are drawn and never picked.
 const isPickable = entry => isPickableEntry(entry, activeLayer);
 
+const hasFile = filename => sources.has(filename);
+const drawChoices = () => drawChoicesOf(activeLayer, rules, {hasFile});
+
 // The working objects of a file, or none when the bundle does not have it.
 const entriesOf = filename => (sources.has(filename) ? session.workingEntries(filename) : []);
 
@@ -166,8 +169,8 @@ function behaviorContext() {
     isPhone: () => phoneLayout.matches,
     isMagnetOn,
     entriesOf,
-    // A version 4 bundle has no derived slopes, so their behavior cannot follow a moved ridge there.
-    hasFile: filename => sources.has(filename),
+    // Which sources the opened bundle carries, so a behavior can serve the right version.
+    hasFile,
     // The one level of the road graph that is shown, or null for all.
     shownLevel: () => shownLevel,
     select: entry => selectObject(entry, true),
@@ -251,9 +254,18 @@ function withDerivedFacts(entry) {
   return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
 }
 
+// What the layer's behaviors derive from working objects rather than keep as session edits, by filename.
+function derivedPreviews() {
+  if (!activeLayer) return new Map();
+  const context = behaviorContext();
+  return new Map(
+    activeLayer.files.flatMap(filename => Object.entries(behaviorOf(filename, activeLayer.id).derivedPreviews(context)))
+  );
+}
+
 // The active layer's files and every changed file use the public cartography with their working features. The others
-// stay as released, for context.
-function workingFeatures(displayFeatures) {
+// stay as released, for context. A derived preview replaces the drawn features of its file.
+function workingFeatures(displayFeatures, previews) {
   const featuresByFile = new Map();
   for (const filename of shownFiles()) {
     featuresByFile.set(filename, displayFeatures.filter(({properties}) => properties.sourceFile === filename));
@@ -262,6 +274,7 @@ function workingFeatures(displayFeatures) {
     if (featuresByFile.has(filename)) continue;
     featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
+  for (const [filename, features] of previews) featuresByFile.set(filename, features);
   return featuresByFile;
 }
 
@@ -306,8 +319,11 @@ function refreshOverlay() {
   overlay.setDeletions(markedFeatures());
   overlay.setSketches(sketchFeatures());
   overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom, activeLayer?.pointGuideMinZoom);
+  const previews = derivedPreviews();
+  // Derived files get their own preview source; only real session edits share the overlay's source.
+  const sharedFiles = new Set(shownFiles().filter(filename => !previews.has(filename)));
   try {
-    workingMap.show(workingFeatures(collection.features), new Set(shownFiles()));
+    workingMap.show(workingFeatures(collection.features, previews), sharedFiles);
   } catch (error) {
     showError(new Error(`Drawing the changes failed: ${error.message}`));
   }
@@ -423,7 +439,7 @@ function drawButton(choice) {
 function renderTools() {
   elementById('edit-guides').hidden = !activeLayer;
   elementById('edit-guides-hint').hidden = !activeLayer;
-  const choices = drawChoicesOf(activeLayer, rules).filter(({isDesktopOnly}) => !isDesktopOnly || !phoneLayout.matches);
+  const choices = drawChoices().filter(({isDesktopOnly}) => !isDesktopOnly || !phoneLayout.matches);
   const buttons = choices.map(drawButton);
   const filterButtons = (layerFilters[activeLayer?.id] ?? []).map(filter => {
     const button = createElementWithText('button', filter.label);
@@ -550,7 +566,7 @@ function markForDeletion(entry, name) {
 
 function saveSketch(sketch) {
   // Something of another kind is finished where it was drawn, if anything can be drawn there.
-  const canDrawHere = drawChoicesOf(activeLayer, rules).length > 0;
+  const canDrawHere = drawChoices().length > 0;
   const layerId = layerForSketch(sketch.what, canDrawHere ? activeLayer.id : 'places');
   const item = {...sketch, layer: layerId};
   changeFieldItems(
@@ -600,7 +616,7 @@ function showResolving() {
   const {title, detail} = fieldItemLabel(resolvingItem);
   elementById('resolve-title').textContent = `From the field: ${title}`;
   elementById('resolve-detail').textContent = detail;
-  const choices = resolvingItem.type === 'sketch' ? drawChoicesOf(activeLayer, rules) : [];
+  const choices = resolvingItem.type === 'sketch' ? drawChoices() : [];
   const buttons = choices.map(drawButton);
   elementById('resolve-choices').replaceChildren(...buttons);
 }

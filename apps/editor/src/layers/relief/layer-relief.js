@@ -2,12 +2,17 @@
 import {createElementWithText} from '../../shared/dom.js';
 import {crossesContours, highestContourAround, isClosedLine, keptClosed, surrounds} from './contour-rules.js';
 import {roundedCoordinate} from '../../geometry/geometry-editing.js';
+import {distanceMetres, nearestPointOnSegment} from '../../geometry/geometry-measures.js';
+import {greenKinds} from '../../source-data/derived-facts.js';
 import {isSamePoint} from '../roads/road-shapes.js';
 import {hasMovedEnds, isEndRemoved, sidesOfRidge, slidEnd, slopesWithSlidEnds} from './ridge-ends.js';
+import {endTargetsOf, validateRidgeTopology} from './ridge-topology.js';
+import {slopeFaceFeatures} from './slope-faces.js';
 import {changedStretch, crossesItself, followingEdits} from '../../geometry/shared-shapes.js';
 
 const contoursFile = 'contours.geojson';
 const summitsFile = 'summits.geojson';
+const landFile = 'land.geojson';
 const ridgesFile = 'ridges.geojson';
 const slopesFile = 'slopes.geojson';
 const indexStepMetres = 100;
@@ -16,13 +21,88 @@ const ridgeToleranceMetres = 60;
 const positionTimeoutMilliseconds = 15000;
 const slopesOfRidge = 2;
 const smallestDragFraction = 1 / 256;
+// A tap near a green outline or another ridge joins it; farther taps stay where they were put.
+const ridgeSnapToleranceMetres = 12;
 const crossingMessage = 'Contour lines never cross.';
 const removedEndMessage = 'A ridge end cannot be removed. Move it along the outline of its hill instead.';
 
 // Lines need a big screen; their fields do not.
 const isDesk = context => !context.isPhone();
-// A version 4 bundle leaves derived slopes to the style, so a ridge cannot recolour them there.
+// A version 3 bundle stores its slopes, so a ridge recolours them there; version 4 derives them instead.
 const hasSlopes = context => !context.hasFile || context.hasFile(slopesFile);
+
+const collectionOf = features => ({type: 'FeatureCollection', features});
+const featureValues = entries => entries.map(({feature}) => feature);
+
+// Why this set of ridges cannot be released, or null when it can. The source check's own detail is reused in the
+// inspector, so a feature ID with a colon in it cannot leave a raw prefix in the message.
+function topologyProblemOf(ridges, context) {
+  const land = collectionOf(featureValues(context.entriesOf(landFile)));
+  try {
+    validateRidgeTopology(land, ridges, greenKinds);
+    return null;
+  } catch (error) {
+    return {label: error.label, detail: error.detail ?? error.message};
+  }
+}
+
+// The candidate replaces the open ridge, so one bad ridge cannot be hidden by the old copy of it.
+function ridgeFeaturesFor(change, context) {
+  const others = context.entriesOf(ridgesFile).filter(entry => entry.key !== change.key);
+  return collectionOf([...featureValues(others), change.feature]);
+}
+
+function topologyProblem(change, context) {
+  const problem = topologyProblemOf(ridgeFeaturesFor(change, context), context);
+  return problem ? `Ridge: ${problem.detail}` : null;
+}
+
+// A version 4 ridge may end on another ridge, so deleting that other ridge can leave an end loose.
+function deletionProblem(entry, context) {
+  if (hasSlopes(context)) return null;
+  const remaining = context.entriesOf(ridgesFile).filter(other => other.key !== entry.key);
+  const problem = topologyProblemOf(collectionOf(featureValues(remaining)), context);
+  return problem ? `Deleting this ridge would leave ${problem.label}: ${problem.detail}.` : null;
+}
+
+function nearestTarget(coordinate, segments) {
+  return segments
+    .map(segment => nearestPointOnSegment(coordinate, ...segment))
+    .reduce((nearest, candidate) =>
+      distanceMetres(candidate, coordinate) < distanceMetres(nearest, coordinate) ? candidate : nearest);
+}
+
+// A new ridge's points join the outline of its green area or another ridge when they are tapped close to one.
+function snappedRidgePoint({lngLat}, context, feature) {
+  if (hasSlopes(context)) return null;
+  const coordinate = lngLat.toArray();
+  const drawn = feature.geometry?.coordinates ?? [];
+  const candidate = drawn.length > 0 ? [...drawn, coordinate] : [coordinate, coordinate];
+  const land = collectionOf(featureValues(context.entriesOf(landFile)));
+  const ridges = collectionOf(featureValues(context.entriesOf(ridgesFile)));
+  const targets = endTargetsOf(candidate, land, ridges, greenKinds);
+  if (targets.length === 0) return null;
+  const nearest = nearestTarget(coordinate, targets);
+  return distanceMetres(nearest, coordinate) <= ridgeSnapToleranceMetres ? roundedCoordinate(nearest) : null;
+}
+
+// Version 4 has no slopes to follow: each end slides to the nearest outline of its green area or another ridge.
+function ridgeWithValidEnds(geometry, change, context) {
+  const before = change.before?.geometry?.coordinates ?? change.previousGeometry?.coordinates;
+  if (!before) return geometry;
+  const otherRidges = collectionOf(
+    featureValues(context.entriesOf(ridgesFile).filter(entry => entry.key !== change.key))
+  );
+  const land = collectionOf(featureValues(context.entriesOf(landFile)));
+  const targets = endTargetsOf(before, land, otherRidges, greenKinds);
+  if (targets.length === 0) return geometry;
+  const coordinates = [...geometry.coordinates];
+  for (const index of [0, coordinates.length - 1]) {
+    if (isSamePoint(coordinates[index], before.at(index === 0 ? 0 : -1))) continue;
+    coordinates[index] = roundedCoordinate(nearestTarget(coordinates[index], targets));
+  }
+  return {...geometry, coordinates};
+}
 
 const otherContourLines = (key, context) =>
   context
@@ -159,12 +239,14 @@ function slopeEdits({feature, before}, context) {
   return stretch ? followingEdits(context.entriesOf(slopesFile), stretch, ridgeToleranceMetres) : [];
 }
 
-// Light and shade that cannot follow would no longer meet at the ridge, so that is refused.
+// An edit must respect the slope shapes it would move, or the version-4 ridge rules on a bundle without slopes.
 function ridgeProblem(edit, context) {
   const {feature, before, origins} = edit;
-  if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
-  if (isEndRemoved(before.geometry.coordinates, feature.geometry.coordinates, origins)) return removedEndMessage;
-  if (!hasSlopes(context)) return null;
+  if (before?.geometry && JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
+  if (before?.geometry && isEndRemoved(before.geometry.coordinates, feature.geometry.coordinates, origins)) {
+    return removedEndMessage;
+  }
+  if (!hasSlopes(context)) return topologyProblem(edit, context);
   const slopes = slopeEdits(edit, context);
   // One is sunlit and one is shaded.
   if (slopes.length < slopesOfRidge) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';
@@ -180,11 +262,20 @@ function renderRidgeExtras(container, {feature, context}) {
   const height = entry?.feature.properties.ele;
   if (summitName) container.append(createElementWithText('p', `Passes over ${summitName}${height ? ` · ${height} m` : ''}`));
   const explanation = context.hasFile && !context.hasFile(slopesFile)
-    ? 'This bundle has no separate slopes, so moving a ridge does not recolour them and its ends stay where they are.'
+    ? 'Each end lies on the green area outline or another ridge, and the two slope faces are drawn from the ridge.'
     : 'The ridge splits light from shade. Moving it recolours both sides at once, and its ends slide along the outline of the hill.';
   const note = createElementWithText('p', explanation);
   note.className = 'hint';
   container.append(note);
+}
+
+// Version 4 has no published slopes. Its faces are drawn from the working ridges and green areas, as a preview: they
+// are never picked, session edits or changeset operations.
+function ridgePreviewFeatures(context) {
+  if (hasSlopes(context)) return {};
+  const land = featureValues(context.entriesOf(landFile));
+  const ridges = context.entriesOf(ridgesFile).map(({feature}) => feature.geometry);
+  return {[slopesFile]: slopeFaceFeatures(land, ridges)};
 }
 
 export const reliefBehaviors = {
@@ -207,9 +298,17 @@ export const reliefBehaviors = {
     title: ({properties}) => properties.name || properties.summitName || 'Ridge',
     sections: () => [{title: 'Ridge', fields: ['name']}],
     isReshapable: isDesk,
-    limitedGeometry: ridgeWithEndsOnOutline,
+    snappedPoint: snappedRidgePoint,
+    limitedGeometry: (geometry, change, context) => hasSlopes(context)
+      ? ridgeWithEndsOnOutline(geometry, change, context)
+      : ridgeWithValidEnds(geometry, change, context),
     problem: ridgeProblem,
     companionEdits: slopeEdits,
+    derivedPreviews: ridgePreviewFeatures,
+    deletion: (entry, context) => {
+      const problem = deletionProblem(entry, context);
+      return problem ? {problem} : {message: '', edits: []};
+    },
     renderExtras: renderRidgeExtras
   }
 };

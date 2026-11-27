@@ -1,8 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import {crossesContours, highestContourAround, isClosedLine, keptClosed} from '../src/layers/relief/contour-rules.js';
 import {reliefBehaviors} from '../src/layers/relief/layer-relief.js';
+import {validateRidgeTopology} from '../src/layers/relief/ridge-topology.js';
+import {greenKinds} from '../src/source-data/derived-facts.js';
+import {editorLayers} from '../src/layers/shared/editor-layers.js';
+import {drawChoicesOf} from '../src/layers/shared/layer-behaviors.js';
 import {settlementBehaviors} from '../src/layers/settlements/layer-settlements.js';
+import {pinnedContractsRoot} from './pinned-contracts.mjs';
+
+const fixtureRules = JSON.parse(readFileSync(new URL('fixtures/editor-layers.json', import.meta.url), 'utf8'));
+const pinnedRules = JSON.parse(readFileSync(path.join(pinnedContractsRoot, 'editor-layers.json'), 'utf8'));
 
 const step = 0.001;
 const at = ([east, north]) => [19 + east * step, 42 + north * step];
@@ -93,21 +103,120 @@ test('a moved ridge recolours both slopes, and its ends stay on the outline of i
   for (const edit of movedMiddle) assert.ok(hasCorner(edit, [2, 6]));
 });
 
-test('a bundle without slopes lets a ridge move without recolouring or sliding its ends', () => {
+test('a bundle without slopes slides a ridge end onto its green outline and records no slope edit', () => {
   const ridge = coordinates => feature({kind: 'ridge'}, {type: 'LineString', coordinates});
+  const park = feature({kind: 'park'}, {type: 'Polygon', coordinates: [ringOf([0, 0], [4, 0], [4, 10], [0, 10])]});
   const before = ridge(points([0, 5], [2, 5], [4, 5]));
   const context = {
-    ...contextWith({}),
+    ...contextWith({'land.geojson': [park], 'ridges.geojson': [before]}),
     hasFile: filename => filename !== 'slopes.geojson',
     session: {workingFeature: () => before}
   };
   const behavior = reliefBehaviors['ridges.geojson'];
   const dragged = {type: 'LineString', coordinates: points([1, 6], [2, 6], [4, 6])};
   const limited = behavior.limitedGeometry(dragged, {key: '0', previousGeometry: before.geometry}, context);
-  assert.deepEqual(limited.coordinates, dragged.coordinates, 'no slope outline to slide an end along');
+  assert.deepEqual(limited.coordinates, points([0, 6], [2, 6], [4, 6]));
   const edit = {feature: {...before, geometry: limited}, before};
   assert.equal(behavior.problem(edit, context), null);
   assert.deepEqual(behavior.companionEdits(edit, context), []);
+  const outlinePoint = at([0, 4]);
+  const tappedNearOutline = [outlinePoint[0] + 0.000005, outlinePoint[1]];
+  assert.deepEqual(
+    behavior.snappedPoint(
+      {lngLat: {toArray: () => tappedNearOutline}},
+      context,
+      {geometry: {coordinates: points([0, 5])}}
+    ),
+    outlinePoint
+  );
+});
+
+test('a version-4 ridge must stay in one green area and end on its outline or another ridge', () => {
+  const ridge = coordinates => feature({kind: 'ridge'}, {type: 'LineString', coordinates});
+  const park = feature({kind: 'park'}, {type: 'Polygon', coordinates: [ringOf([0, 0], [4, 0], [4, 10], [0, 10])]});
+  const before = feature({kind: 'ridge', entityId: 'derived:ridge-1'}, {
+    type: 'LineString',
+    coordinates: points([0, 5], [2, 5], [4, 5])
+  });
+  const context = {
+    ...contextWith({'land.geojson': [park], 'ridges.geojson': [before]}),
+    hasFile: filename => filename !== 'slopes.geojson',
+    session: {workingFeature: () => before}
+  };
+  const {problem} = reliefBehaviors['ridges.geojson'];
+  const relocated = {feature: ridge(points([0, 12], [2, 12], [4, 12])), before};
+  assert.equal(problem(relocated, context), 'Ridge: ridge is outside a green area');
+  const loose = {feature: ridge(points([1, 4], [2, 4], [4, 4])), before};
+  assert.equal(problem(loose, context), 'Ridge: ridge end is not on the green area outline or another ridge');
+  const meeting = ridge(points([2, 0], [2, 5]));
+  const withJunction = {
+    ...context,
+    entriesOf: filename => filename === 'ridges.geojson'
+      ? [{filename, key: '0', feature: before}, {filename, key: '1', feature: meeting}]
+      : context.entriesOf(filename)
+  };
+  assert.equal(problem({feature: ridge(points([0, 6], [2, 4])), before}, withJunction), null);
+});
+
+test('deleting a ridge that supports another one is refused only where slopes are derived', () => {
+  const ridge = (entityId, coordinates) =>
+    feature({kind: 'ridge', entityId}, {type: 'LineString', coordinates});
+  const park = feature({kind: 'park'}, {type: 'Polygon', coordinates: [ringOf([0, 0], [4, 0], [4, 10], [0, 10])]});
+  const supporting = ridge('derived:ridge-1', points([0, 5], [4, 5]));
+  const dependent = ridge('derived:ridge-2', points([2, 0], [2, 5]));
+  const entries = [supporting, dependent];
+  const context = {
+    ...contextWith({'land.geojson': [park], 'ridges.geojson': entries}),
+    hasFile: filename => filename !== 'slopes.geojson'
+  };
+  const {deletion} = reliefBehaviors['ridges.geojson'];
+  const supportingEntry = {filename: 'ridges.geojson', key: '0', feature: supporting};
+  assert.match(
+    deletion(supportingEntry, context).problem,
+    /^Deleting this ridge would leave derived:ridge-2: ridge end is not on the green area outline or another ridge\.$/
+  );
+  assert.deepEqual(deletion({...supportingEntry, key: '1', feature: dependent}, context), {message: '', edits: []});
+  assert.deepEqual(deletion(supportingEntry, {...context, hasFile: () => true}), {message: '', edits: []});
+});
+
+test('the relief behavior derives slope previews only for a version-4 bundle', () => {
+  const park = feature({kind: 'park'}, {type: 'Polygon', coordinates: [ringOf([0, 0], [4, 0], [4, 10], [0, 10])]});
+  const ridge = feature({kind: 'ridge'}, {type: 'LineString', coordinates: points([0, 5], [4, 5])});
+  const context = {
+    ...contextWith({'land.geojson': [park], 'ridges.geojson': [ridge]}),
+    hasFile: filename => filename !== 'slopes.geojson'
+  };
+  const {derivedPreviews} = reliefBehaviors['ridges.geojson'];
+  const previews = derivedPreviews(context)['slopes.geojson'];
+  assert.deepEqual(previews.map(({properties}) => properties.aspect).sort(), ['shaded', 'sunlit']);
+  assert.deepEqual(derivedPreviews({...context, hasFile: () => true}), {});
+});
+
+test('the topology check uses the tolerance it is given for ridge ends', () => {
+  const park = feature({kind: 'park'}, {type: 'Polygon', coordinates: [ringOf([0, 0], [4, 0], [4, 10], [0, 10])]});
+  const [east, north] = at([4, 5]);
+  const ridge = feature({kind: 'ridge', entityId: 'derived:ridge-1'}, {
+    type: 'LineString',
+    coordinates: [at([0, 5]), [east - 0.000005, north]]
+  });
+  const land = {type: 'FeatureCollection', features: [park]};
+  const ridges = {type: 'FeatureCollection', features: [ridge]};
+  assert.equal(validateRidgeTopology(land, ridges, greenKinds), 1);
+  assert.throws(
+    () => validateRidgeTopology(land, ridges, greenKinds, {tolerance: 0.000001}),
+    /derived:ridge-1: ridge end is not on the green area outline or another ridge/
+  );
+});
+
+test('a ridge can be added and deleted under the pinned rules, but only a derived-slopes bundle offers Draw ridge', () => {
+  assert.deepEqual(fixtureRules.layers['ridges.geojson'], pinnedRules.layers['ridges.geojson']);
+  const relief = editorLayers.find(({id}) => id === 'relief');
+  const hasSlopes = drawChoicesOf(relief, fixtureRules, {hasFile: () => true});
+  const derived = drawChoicesOf(relief, fixtureRules, {hasFile: () => false});
+  assert.equal(hasSlopes.some(({label}) => label === 'Draw ridge'), false);
+  const choice = derived.find(({label}) => label === 'Draw ridge');
+  assert.ok(choice);
+  assert.deepEqual(choice.properties, {kind: 'ridge'});
 });
 
 test('a ridge end cannot be removed, but a point between its ends can', () => {

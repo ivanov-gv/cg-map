@@ -14,7 +14,9 @@ const ownControls = {
   'buildings.geojson': ['addr:street'],
   'building-labels.geojson': ['addr:street', 'entrances'],
   // Found by the place, never chosen.
-  'settlements.geojson': ['municipality', 'source']
+  'settlements.geojson': ['municipality', 'source'],
+  // Shown in the ridge note from the summit it passes, never chosen here.
+  'ridges.geojson': ['summit', 'summitName']
 };
 
 test('every property that can be filled in has a list, a control of its own, or a reason to be typed', () => {

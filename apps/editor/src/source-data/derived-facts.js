@@ -6,7 +6,7 @@ import {pointInsidePolygon} from '../geometry/geometry-validation.js';
 const roadsFile = 'roads.geojson';
 const landFile = 'land.geojson';
 // As the tile builder reads them from the relief build (data/tools/green-areas.mjs): park paths are drawn differently.
-const greenKinds = new Set([
+export const greenKinds = new Set([
   'park',
   'garden',
   'woods',

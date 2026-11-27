@@ -1,7 +1,7 @@
 // A city of a few objects per layer, small enough to read, with everything the current bundle version holds. A caller
 // can also ask for version 4, which has bridge outlines and railways instead of derived slopes. Layers the pinned
 // reviewed bundle does not emit yet are tested on it. The rules beside it are this app's own copy for tests: they match
-// the pinned contracts for new files, while ridges stay view-only here until #490.
+// the pinned contracts, including ridges that can be added and deleted in the derived-slopes version.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {bundleFilesByVersion, currentBundleVersion} from '../../src/source-data/source-bundle.js';
@@ -51,7 +51,8 @@ const contour = (number, elevation, corners) =>
 const stop = (id, name, lines, geometry) =>
   feature(`epodgorica:${id}`, {name, stopId: id, lines, side: 'left'}, geometry, {id});
 
-function cityFeatures() {
+function cityFeatures(version) {
+  const isDerivedSlopes = version >= 4;
   return {
     'buildings.geojson': [
       building(1, square(-3, 1, 2), {'addr:street': 'Main street', 'addr:housenumber': '14', 'building:levels': '5'}),
@@ -127,7 +128,19 @@ function cityFeatures() {
     'road-nodes.geojson': [feature('node/40', {kind: 'crossing'}, point(0, 0))],
     'land.geojson': [
       feature('relation/1', {kind: 'country', name: 'Country'}, polygon(square(-600, -600, 1200))),
-      feature('way/50', {kind: 'park', name: 'Town park', osmTag: 'leisure=park'}, polygon(square(2, -5, 4)))
+      feature(
+        'way/50',
+        {kind: 'park', name: 'Town park', osmTag: 'leisure=park'},
+        // The derived faces must be large enough for the published minimum area; the v3 hill is a separate fixture.
+        polygon(square(2, isDerivedSlopes ? -8 : -5, isDerivedSlopes ? 12 : 4))
+      ),
+      ...(isDerivedSlopes
+        ? [feature(
+          'way/52',
+          {kind: 'meadow', name: 'Town hill meadow', osmTag: 'leisure=meadow'},
+          polygon(square(10, 0, 10))
+        )]
+        : [])
     ],
     'protected-areas.geojson': [
       feature(
@@ -184,7 +197,12 @@ function cityFeatures() {
     'ridges.geojson': [
       feature(
         'derived:ridge-1',
-        {kind: 'ridge', sunlitSide: 'south', shadedSide: 'north', summit: 'node/70', summitName: 'Town hill'},
+        {
+          kind: 'ridge',
+          ...(isDerivedSlopes ? {} : {sunlitSide: 'south', shadedSide: 'north'}),
+          summit: 'node/70',
+          summitName: 'Town hill'
+        },
         line([10, 5], [15, 5], [20, 5])
       )
     ],
@@ -305,7 +323,7 @@ const featureCountOf = (filename, features) =>
 
 // Every source file of the city as text, with the manifest the editor verifies it by.
 export function fixtureBundle(version = currentBundleVersion) {
-  const features = cityFeatures();
+  const features = cityFeatures(version);
   const filenames = bundleFilesByVersion[version];
   const files = new Map(filenames.map(filename => [filename, sourceText(filename, features)]));
   const layers = filenames.map(filename => ({
