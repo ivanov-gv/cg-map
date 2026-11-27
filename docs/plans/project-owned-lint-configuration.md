@@ -20,6 +20,9 @@ configs land now, while the root config keeps serving the three apps.
 
 ## History
 
+- 2026-11-27: Web migrated to its own config, so all nine linting projects consume the shared rules. The root config
+  stays for repository-level files and the pre-commit fallback; its retirement, Platform's probe repointing and the
+  planner narrowing are a separate follow-up, keeping one app per PR. (#456)
 - 2026-11-26: Compliance review restored lint coverage of the root config and every migrated project config, replaced
   the one-use configPath helper with a local path, ordered this History newest first, and proved the shared-rule guard
   test catches a disabled guard on a scratch copy. Effective-rule equivalence was already proved for linted files; this
