@@ -7,7 +7,7 @@
     "lint": "eslint .",
     "test": "node --test 'src/!(*.browser).test.js' 'tools/!(*.browser).test.js' 'tests/!(*.browser).test.js' 'tests/*.test.mjs'",
     "build": "node tools/build.mjs",
-    "pretest:e2e": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" MAP_CONTRACTS_ROOT=\"$(node tests/pinned-contracts.mjs)\" npm run build",
+    "pretest:e2e": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" MAP_CONTRACTS_ROOT=\"$(node tests/pinned-contracts.mjs)\" MAP_CORE_ROOT=\"$(node tests/pinned-core.mjs)\" npm run build",
     "test:e2e": "playwright test",
     "test:e2e:built": "playwright test"
   },

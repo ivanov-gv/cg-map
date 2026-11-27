@@ -10,7 +10,8 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const outputDirectory = path.join(repositoryRoot, 'dist/web');
 const isCheck = process.argv.includes('--check');
 // The manifest describes the data the build used. Test targets pin this root to the same package as the build.
-const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'));
+const releaseBuild = process.env.WEB_RELEASE === '1';
+const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'), {release: releaseBuild});
 const provenance = JSON.parse(
   fileSystem.readFileSync(path.join(dataRoot, 'sources/provenance.json'), 'utf8')
 );

@@ -29,10 +29,9 @@ test('the level table has consecutive levels with increasing zooms and an admitt
 
 test('editor bundle versions freeze each version and add to the one before', () => {
   const schema = readJSON('editor-bundle.schema.json');
-  assert.deepEqual(schema.properties.version.enum, [1, 2, 3]);
-  const [version1, version2, version3] = schema.oneOf;
-  assert.equal(version1.properties.version.const, 1);
-  assert.equal(version2.properties.version.const, 2);
+  assert.deepEqual(schema.properties.version.enum, [1, 2, 3, 4]);
+  const branches = new Map(schema.oneOf.map(branch => [branch.properties.version.const, branch]));
+  assert.deepEqual([...branches.keys()].sort(), [1, 2, 3, 4]);
   const originalFiles = [
     'building-labels.geojson',
     'buildings.geojson',
@@ -43,50 +42,68 @@ test('editor bundle versions freeze each version and add to the one before', () 
     'transport-stops.geojson',
     'water.geojson'
   ];
-  const version1Files = version1.properties.layers.items.properties.filename.enum;
-  const version2Files = version2.properties.layers.items.properties.filename.enum;
-  assert.deepEqual(version1Files, originalFiles);
-  assert.deepEqual(
-    version2Files,
+  const additions = new Map([
+    [1, originalFiles],
     [
-      ...originalFiles,
-      'building-entrances.geojson',
-      'road-nodes.geojson',
-      'border-edges.geojson',
-      'municipalities.geojson',
-      'settlements.geojson'
-    ].sort()
-  );
-  const version3Files = version3.properties.layers.items.properties.filename.enum;
-  assert.deepEqual(
-    version3Files,
+      2,
+      [
+        'building-entrances.geojson',
+        'road-nodes.geojson',
+        'border-edges.geojson',
+        'municipalities.geojson',
+        'settlements.geojson'
+      ]
+    ],
     [
-      ...version2Files,
-      'canyon-rims.geojson',
-      'contours.geojson',
-      'protected-areas.geojson',
-      'ridges.geojson',
-      'settlement-areas.geojson',
-      'slopes.geojson',
-      'summits.geojson',
-      'transit-routes.json',
-      'turn-restrictions.json'
-    ].sort()
-  );
-  assert.equal(version3.properties.version.const, 3);
-  assert.equal(version3.properties.layers.minItems, version3Files.length);
-  assert.equal(version3.properties.layers.maxItems, version3Files.length);
-  assert.equal(version1.properties.layers.minItems, version1Files.length);
-  assert.equal(version1.properties.layers.maxItems, version1Files.length);
-  assert.equal(version2.properties.layers.minItems, version2Files.length);
-  assert.equal(version2.properties.layers.maxItems, version2Files.length);
+      3,
+      [
+        'canyon-rims.geojson',
+        'contours.geojson',
+        'protected-areas.geojson',
+        'ridges.geojson',
+        'settlement-areas.geojson',
+        'slopes.geojson',
+        'summits.geojson',
+        'transit-routes.json',
+        'turn-restrictions.json'
+      ]
+    ],
+    [4, ['bridges.geojson']]
+  ]);
+  let previousFiles = [];
+  for (const version of [1, 2, 3, 4]) {
+    const branch = branches.get(version);
+    const files = branch.properties.layers.items.properties.filename.enum;
+    assert.deepEqual(files, [...previousFiles, ...additions.get(version)].sort());
+    assert.equal(branch.properties.layers.minItems, files.length);
+    assert.equal(branch.properties.layers.maxItems, files.length);
+    assert.deepEqual([...new Set(files)].sort(), files);
+    previousFiles = files;
+  }
+});
+
+test('bridges are an editable polygon layer with only reviewed property rules', () => {
+  assert.deepEqual(readJSON('editor-layers.json').layers['bridges.geojson'], {
+    operations: ['add', 'modify', 'delete'],
+    geometries: ['Polygon'],
+    properties: {
+      kind: {requiredOnAdd: true, enum: ['bridge']},
+      name: {maxLength: 128},
+      'name:en': {maxLength: 128},
+      method: {enum: ['osm', 'traced'], addOnly: true},
+      osmTag: {enum: ['man_made=bridge'], addOnly: true},
+      sourceRoadIds: {type: 'list', maxLength: 64, pattern: '^(way|relation)/[1-9][0-9]*$', addOnly: true}
+    }
+  });
 });
 
 // A bundled file without rules could be shown and never edited, and rules without a file could never be reached.
-test('the editing rules cover exactly the files of the current bundle', () => {
-  const currentVersion = readJSON('editor-bundle.schema.json').oneOf.at(-1);
-  const bundledFiles = currentVersion.properties.layers.items.properties.filename.enum;
-  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), [...bundledFiles].sort());
+test('the editing rules cover exactly the files of the declared version 4 source set', () => {
+  const branches = readJSON('editor-bundle.schema.json').oneOf;
+  const version4 = branches.find(branch => branch.properties.version.const === 4);
+  assert.ok(version4, 'the contract declares version 4');
+  const declaredFiles = version4.properties.layers.items.properties.filename.enum;
+  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), [...declaredFiles].sort());
 });
 
 test('canyon rims state one optional whole-metre width beside their height', () => {

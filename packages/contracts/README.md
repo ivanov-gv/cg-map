@@ -120,11 +120,23 @@ settlement, which has at most one area.
 
 `editor-bundle.schema.json` defines the editor's source bundle: one filename, byte size, feature count and SHA-256 per
 source file. Version 1 holds the original eight files, version 2 thirteen, version 3 every file of an object on the map,
-including `transit-routes.json` and `turn-restrictions.json`, whose records count as features without geometry. Released
-versions are frozen; the producer writes the last one and the editor reads all. Data-owned assembly preserves bytes, and
-the editor verifies the whole bundle. It is built into dist/editor only. See
+including `transit-routes.json` and `turn-restrictions.json`, whose records count as features without geometry, and
+version 4 adds `bridges.geojson` to the declared source set. Released versions are frozen; the producer and the Editor
+keep writing and reading version 3 here. Version 4 is a pending declaration for the next steps, not an emitted bundle:
+the Editor first pins this release and reads version 4, then data emits it. Data-owned assembly preserves bytes, and the
+Editor verifies every listed file. It is built into dist/editor only. See
 [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md) and
 [decision 0037](../../docs/decisions/0037-every-layer-editable.md).
+
+Next release notes: this change is the next `@ivanov-gv/map-contracts` release, but no package is published here.
+Version 4 declares the reviewed bridge outlines in the editor's source set. Its `bridges.geojson` rule allows Polygon
+add, modify and delete; `name` and `name:en` are editable text, while `kind`, `method`, `osmTag` and `sourceRoadIds`
+keep only the values the reviewed source uses. The seed provenance from
+[ADR 0047](../../docs/decisions/0047-bridge-outlines-seeded-once.md) is not re-derived or invented: `method` is `osm` or
+`traced`, an OSM outline carries `man_made=bridge`, and a traced outline names sorted source road IDs. A new object may
+omit those source facts; the importer owns whatever it assigns. Consumers pinned to the previous release keep reading
+frozen version 3, and this release changes no consumer pin. The Editor reads version 4 in its own step before data emits
+it.
 
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows: operations, geometry
 types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the

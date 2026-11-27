@@ -1,21 +1,18 @@
-// Assembles dist/core-demo from this app's own files and the map-core build contract.
+// Assembles dist/core-demo from this app's own files, the map-core build contract and the data-owned source bundle.
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {assembleStaticApplication} from '@ivanov-gv/map-core/tools/assemble.mjs';
+import {importCoreModule, resolveCoreRoot} from './core-root.mjs';
 import {resolveContractsRoot} from './contracts-root.mjs';
+import {resolveDataRoot} from './data-root.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const outputDirectory = fileURLToPath(new URL('../../../dist/core-demo/', import.meta.url));
-// Dev builds use HEAD; a future app production release pins every dependency. Test targets set both roots to the pinned
-// data and contracts packages.
-function resolveDataRoot(defaultRoot) {
-  if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {
-    throw new Error('MAP_DATA_ROOT is set but empty; test targets must resolve the pinned @ivanov-gv/map-data package');
-  }
-  return process.env.MAP_DATA_ROOT ? path.resolve(process.env.MAP_DATA_ROOT) : defaultRoot;
-}
-
-const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'));
+// A build that is not a release takes core, data and contracts from its own commit. Test targets and a release use the
+// pins this app declares; CORE_DEMO_RELEASE marks the release invocation so another root cannot be substituted.
+const releaseBuild = process.env.CORE_DEMO_RELEASE === '1';
+const coreRoot = resolveCoreRoot({release: releaseBuild});
+const {assembleStaticApplication} = await importCoreModule('tools/assemble.mjs', coreRoot);
+const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'), {release: releaseBuild});
 const contractsRoot = resolveContractsRoot();
 const dataToolsURL = pathToFileURL(path.join(dataRoot, 'tools/app-data.mjs')).href;
 const {copyMapData} = await import(dataToolsURL);
@@ -24,4 +21,4 @@ copyMapData(outputDirectory, {
   dataRoot,
   contractPath: path.join(contractsRoot, 'place-visibility.json')
 });
-console.log('Built dist/core-demo/');
+console.log(`Built dist/core-demo/ (core from ${coreRoot})`);

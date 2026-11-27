@@ -94,7 +94,10 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
     const appPackage = readJSON(`${application}/package.json`);
     assert.equal(appPackage.scripts.build, 'node tools/build.mjs', 'dev builds must keep repository contracts');
     const buildSource = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tools/build.mjs'), 'utf8');
-    assert.match(buildSource, /resolveContractsRoot\(\)/);
+    const contractsCall = application === 'apps/web'
+      ? /resolveContractsRoot\(\{release: releaseBuild\}\)/
+      : /resolveContractsRoot\(\)/;
+    assert.match(buildSource, contractsCall);
     assert.doesNotMatch(buildSource, /import\.meta\.resolve\(['"]@ivanov-gv\/map-contracts/);
 
     const helper = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tests/pinned-contracts.mjs'), 'utf8');

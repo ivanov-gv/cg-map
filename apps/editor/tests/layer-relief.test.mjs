@@ -93,6 +93,35 @@ test('a moved ridge recolours both slopes, and its ends stay on the outline of i
   for (const edit of movedMiddle) assert.ok(hasCorner(edit, [2, 6]));
 });
 
+test('a ridge end cannot be removed, but a point between its ends can', () => {
+  const slope = (...steps) => feature({kind: 'slope'}, {type: 'Polygon', coordinates: [ringOf(...steps)]});
+  const ridgeAt = coordinates => feature({kind: 'ridge'}, {type: 'LineString', coordinates});
+  const before = ridgeAt(points([0, 5], [2, 5], [4, 5]));
+  const context = {
+    ...contextWith({
+      'slopes.geojson': [
+        slope([0, 0], [4, 0], [4, 5], [2, 5], [0, 5]),
+        slope([0, 5], [2, 5], [4, 5], [4, 10], [0, 10])
+      ]
+    }),
+    session: {workingFeature: () => before}
+  };
+  const behavior = reliefBehaviors['ridges.geojson'];
+  for (const coordinates of [points([2, 5], [4, 5]), points([0, 5], [2, 5]), points([2, 5])]) {
+    assert.match(
+      behavior.problem({feature: ridgeAt(coordinates), before}, context),
+      /end cannot be removed/,
+      'an end is not a point to delete'
+    );
+  }
+  assert.match(
+    behavior.problem({feature: ridgeAt(points([0, 5], [4, 5])), before, origins: [1, 2]}, context),
+    /end cannot be removed/,
+    'an inner point that took the old place is not that end'
+  );
+  assert.equal(behavior.problem({feature: ridgeAt(points([0, 5], [4, 5])), before}, context), null);
+});
+
 const municipality = (code, name, ...steps) =>
   feature(
     {kind: 'municipality', 'ISO3166-2': code, name, entityId: `relation/${code}`},

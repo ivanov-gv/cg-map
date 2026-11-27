@@ -9,38 +9,39 @@ Each project stands on its own: its own Makefile, build, run, lint and tests, it
 pipeline. A change to one project runs only that project's pipeline, plus those of projects that consume a contract it
 changed.
 
-| Project                | Own Makefile targets                   | CI pipeline       |
-| ---------------------- | -------------------------------------- | ----------------- |
-| apps/web               | verify, build, dev, dev-mock, e2e      | ci-apps-web       |
-| apps/editor            | verify, build, build-release, dev, e2e | ci-apps-editor    |
-| apps/core-demo         | verify, build, dev, e2e                | ci-apps-core-demo |
-| packages/map-core      | verify                                 | ci-map-core       |
-| packages/contracts     | verify                                 | ci-contracts      |
-| data                   | verify, check, build-data              | ci-data           |
-| services/backend       | verify, check, build, generate         | ci-backend        |
-| services/transit-relay | verify                                 | ci-transit-relay  |
-| platform               | verify, agent-rules, worktree          | ci-platform       |
-| tests                  | verify                                 | ci-tests          |
+| Project                | Own Makefile targets                             | CI pipeline       |
+| ---------------------- | ------------------------------------------------ | ----------------- |
+| apps/web               | verify, build, build-release, dev, dev-mock, e2e | ci-apps-web       |
+| apps/editor            | verify, build, build-release, dev, e2e           | ci-apps-editor    |
+| apps/core-demo         | verify, build, build-release, dev, e2e           | ci-apps-core-demo |
+| packages/map-core      | verify                                           | ci-map-core       |
+| packages/contracts     | verify                                           | ci-contracts      |
+| data                   | verify, check, build-data                        | ci-data           |
+| services/backend       | verify, check, build, generate                   | ci-backend        |
+| services/transit-relay | verify                                           | ci-transit-relay  |
+| platform               | verify, agent-rules, worktree                    | ci-platform       |
+| tests                  | verify                                           | ci-tests          |
 
 Projects depend on each other only through these concrete contracts:
 
-| Contract                                       | Producer           | Consumers                                                                                                                    |
-| ---------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web; apps/editor `make verify` artifact, automated tests and release builds, at a pinned version                        |
-| Local map-core, unreleased                     | packages/map-core  | apps/core-demo; apps/editor local `build`, `dev`, `lan` and ci-publish dev-image/Pages builds                                |
-| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                           |
-| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                           |
-| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                     |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration                                       |
-| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                            |
-| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                    |
-| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                       |
-| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                           |
-| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                                |
-| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                           |
-| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                               |
-| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                                        |
-| Shared ESLint rules, platform/eslint-rules.mjs | platform           | packages/map-core, data, packages/contracts, services/transit-relay, platform, tests, apps/editor, apps/core-demo; Web: root |
+| Contract                                       | Producer           | Consumers                                                                                                                         |
+| ---------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web and apps/editor tests, verify and release builds at a pin; platform via web's pin                                        |
+| Workspace map-core pin, `0.0.0-dev`            | packages/map-core  | apps/core-demo tests, verify and release builds                                                                                   |
+| Local map-core, unreleased                     | packages/map-core  | apps/core-demo dev, CI artifact and dev Pages builds; apps/web and apps/editor local builds and ci-publish dev-image/Pages builds |
+| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                                |
+| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                                |
+| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                          |
+| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration                                            |
+| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                                 |
+| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                         |
+| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                            |
+| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                                |
+| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                                     |
+| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                                |
+| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                                    |
+| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                                             |
+| Shared ESLint rules, platform/eslint-rules.mjs | platform           | packages/map-core, data, packages/contracts, services/transit-relay, platform, tests, apps/editor, apps/core-demo; Web: root      |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -78,24 +79,28 @@ Rules:
 
 ### Core modes
 
-apps/editor bundles the core of its own commit in local `build`, `dev` and `lan` and in ci-publish's dev-image and Pages
-builds. One resolver, `tools/core-root.mjs`, defaults to repository `packages/map-core` and honours `MAP_CORE_ROOT`.
-`make verify` builds the `dist/editor` artifact ci-apps-editor uploads with the pinned `@ivanov-gv/map-core`; `test`,
-`e2e`, `e2e-built` and `build-release` use that pin too, and a release refuses any other root. Automated tests keep
-their pins, while apps/web still consumes a pinned core. See
-[ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md).
+All three apps own one resolver, `tools/core-root.mjs`. Plain local `build`, `dev` and ci-publish dev-image/Pages builds
+default to repository `packages/map-core` and honour `MAP_CORE_ROOT`. `make verify` builds the artifact CI uploads from
+each app's pinned `@ivanov-gv/map-core`; Web's `test`, `test-built`, `offline-check`, `e2e`, `e2e-built` and
+`build-release`, Editor's `test`, `e2e`, `e2e-built` and `build-release`, and Core-demo's `test`, `e2e`, `e2e-built` and
+`build-release`, use that pin too. A release refuses any other core root. Core-demo pins the workspace `0.0.0-dev` core
+because it is core's dev environment, so its tests and release build follow core HEAD until a release exists. Platform's
+hosting-test web build calls apps/web's `build-pinned-core` target for its pin, while tests/ keeps its documented HEAD
+default. The same split governs data and contracts: non-release builds read repository roots, while tests and releases
+read pins. See [ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md).
 
 ### Map data modes
 
 Map data reaches an application or its integration tests in four distinct ways:
 
-1. App tests (unit and browser) and the platform hosting test's web build read the exact `@ivanov-gv/map-data` release
-   pinned in their owning manifest, resolved by a pinned-data helper. A data-only change selects no app or platform
-   pipeline.
-2. Dev and CI artifact builds on main read the repository `data/` and its tools at the checked-out commit (HEAD), so
-   developers and the dev site see unreleased data without publishing it.
-3. A future app production release pins every dependency, data included. No app production release exists yet, so this
-   is a rule for future CD; the map-data release CD promotes data packages and is not an app release mode.
+1. App tests (unit and browser), every app's `build-release` and the platform hosting test's web build read the exact
+   `@ivanov-gv/map-data` release pinned in their owning manifest, resolved by a pinned-data helper. A data-only change
+   selects no app or platform pipeline.
+2. Plain dev and CI artifact builds on main read the repository `data/` and its tools at the checked-out commit (HEAD),
+   so developers and the dev site see unreleased data without publishing it.
+3. Every app's `build-release` pins data and contracts as well as core, as a future app production release will. No
+   production app release exists yet, so this is a local release-candidate command, not CD; the map-data release CD
+   promotes data packages and is not an app release mode.
 4. Cross-project integration tests read repository data and tools at HEAD through one helper, which honours
    `MAP_DATA_ROOT`. Before promoting a release, the same suite installs the exact data package and points that helper at
    it, so the release is tested as published.
@@ -109,13 +114,14 @@ or bundle sources take their contract location from the caller and never resolve
 
 Shared formats reach consumers in three operative modes:
 
-1. App tests (unit, built, browser and offline-check) and platform's hosting-test web build read the exact
-   `@ivanov-gv/map-contracts` release pinned in their owning manifest. App test targets set `MAP_CONTRACTS_ROOT` from
-   each app's own pinned-contracts helper; platform uses its own helper. A contract-only change selects no app pipeline.
-2. Dev and CI artifact builds on main, including ci-publish's `pages` job and the content cd-dev-pages deploys, read
-   repository `packages/contracts` at HEAD. Each of the three apps has one build resolver that defaults to that
-   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. A future app
-   production release pins every dependency, contracts included. No app production release exists yet.
+1. App tests (unit, built, browser and offline-check), every app's `build-release` and platform's hosting-test web build
+   read the exact `@ivanov-gv/map-contracts` release pinned in their owning manifest. App test targets set
+   `MAP_CONTRACTS_ROOT` from each app's own pinned-contracts helper; platform uses its own helper. A contract-only
+   change selects no app pipeline.
+2. Plain dev and CI artifact builds on main, including ci-publish's `pages` job and the content cd-dev-pages deploys,
+   read repository `packages/contracts` at HEAD. Each of the three apps has one build resolver that defaults to that
+   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. Every app's
+   `build-release` pins contracts too, as a future app production release will. No production app release exists yet.
 3. Cross-project integration tests read repository contracts at HEAD through one helper, which honours
    `MAP_CONTRACTS_ROOT`. Before promoting a release, `tests/` installs the exact package and sets
    `MAP_CONTRACTS_VERSION` so the whole suite tests the candidate.
@@ -181,11 +187,11 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
    generates its manifests ([ADR 0045](../decisions/0045-build-derived-web-shell.md)).
 4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
    nightly run does the same on main.
-5. A merge to main triggers ci-publish, whose `pages` job builds all three apps from source, writes version.json with
-   the commit SHA, and pushes the image as `dev-pages:<sha>`. When ci-publish completes successfully on main,
-   cd-dev-pages is triggered via `workflow_run`, pulls the image by commit SHA, extracts the site, and deploys it to
-   GitHub Pages. CD never runs for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch but
-   main. Source files, docs, datasets used for generation, and backend code are excluded.
+5. A merge to main triggers ci-publish, whose `pages` job builds all three apps from source with their own commit's
+   packages, writes version.json with the commit SHA, and pushes the image as `dev-pages:<sha>`. When ci-publish
+   completes successfully on main, cd-dev-pages is triggered via `workflow_run`, pulls the image by commit SHA, extracts
+   the site, and deploys it to GitHub Pages. CD never runs for a CI test run, a dispatched CI run, a failed or cancelled
+   run, or any branch but main. Source files, docs, datasets used for generation, and backend code are excluded.
 
 The web app runs at /cg-map/web/, and owns only that path's worker. No deployment redirect or web asset tree is
 committed in repository root.
@@ -227,8 +233,9 @@ hosted endpoint and deployment identity are recorded with the service. Live data
 ## Additional browser artifacts
 
 apps/core-demo and apps/editor build their own artifacts, dist/core-demo and dist/editor. Pages publishes all three
-apps, each under its own path. [source editor](../../apps/editor/README.md) verifies a data-owned hash-pinned source
-bundle and edits it by layers, each with the source files that belong together
+apps, each under its own path. Core-demo's plain build and Pages artifact take core, data and contracts from the commit;
+its tests and `build-release` take the app's pins. [source editor](../../apps/editor/README.md) verifies a data-owned
+hash-pinned source bundle and edits it by layers, each with the source files that belong together
 ([ADR 0038](../decisions/0038-editor-layers-span-files.md)). It never writes sources: it exports changesets, which the
 data-owned importer applies. It installs on the owner's devices from a local HTTPS server and then runs offline, keeping
 its map archive whole in a cache of its own and answering range reads from that copy. Both consume the
