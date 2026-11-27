@@ -9,7 +9,7 @@ export {
   archiveFilenamePattern,
   mapBounds
 } from './map.js';
-export {mapStyle, installBuildingNumberScale} from './map-style.js';
+export {mapStyle, installBuildingNumberScale, roadLayerIds} from './map-style.js';
 export {drawingGroups, drawingGroupKey} from './drawing-order.js';
 export {basemapColors} from './basemap-palette.js';
 export {installSatellite, setSatelliteVisible, satelliteBounds, satelliteLayerIds} from './satellite.js';

@@ -308,6 +308,17 @@ function walkingLayers() {
   ];
 }
 
+const baseRoadLayerIds = new Set([...streetLayers(), ...walkingLayers()].map(({id}) => id));
+
+// Applications that hit-test roads by style layer id pass the base ids they already use. An unknown id fails loudly,
+// so a renamed or label layer cannot silently drop roads from a query.
+export function roadLayerIds(baseIds) {
+  return baseIds.map(id => {
+    if (!baseRoadLayerIds.has(id)) throw new Error(`Unknown road layer: ${id}`);
+    return id;
+  });
+}
+
 function labelLayers() {
   return [
     inDrawingGroup('labels', {
