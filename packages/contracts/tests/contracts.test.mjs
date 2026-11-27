@@ -123,6 +123,7 @@ test('railways are editable as stored, with only the reviewed property rules', (
   });
 });
 
+// The sun's direction is one derivation convention, not a fact repeated on each ridge.
 test('ridges are drawn facts with only the reviewed property rules', () => {
   const layers = readJSON('editor-layers.json').layers;
   assert.deepEqual(layers['ridges.geojson'], {
@@ -130,8 +131,6 @@ test('ridges are drawn facts with only the reviewed property rules', () => {
     geometries: ['LineString'],
     properties: {
       kind: {requiredOnAdd: true, enum: ['ridge']},
-      sunlitSide: {requiredOnAdd: true, maxLength: 120},
-      shadedSide: {requiredOnAdd: true, maxLength: 120},
       summit: {pattern: '^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$'},
       summitName: {maxLength: 120},
       name: {maxLength: 120}

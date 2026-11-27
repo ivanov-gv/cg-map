@@ -143,15 +143,17 @@ by kind, so the Editor could draw a station as a polygon until its version-4 ste
 data validation still refuses such a feature. How a new railway receives its source tag belongs to the Editor and data
 steps that follow.
 
-The `ridges.geojson` rule allows LineString add, modify and delete. `kind` is `ridge`; `sunlitSide` and `shadedSide` are
-required compass text, and `summit` and `summitName` stay optional together when a summit is linked. A new or moved
-ridge must lie inside one green area, and each end must meet that area's outline or another ridge.
-`editor-layers.schema.json` has no field for that topology, so the contract states it here: the data step's `check-data`
-enforces both rules, and the importer runs `check-data` on every changeset. The shared `editor-layers.json` still
-carries the version-3 slope rule while the producer emits version 3; the Editor's version-4 step on #490 removes it,
-derives slope faces in its preview and stops editing slopes directly. Consumers pinned to the previous release keep
-reading frozen version 3, and this release changes no consumer pin. The Editor reads version 4 in its own step before
-data emits it.
+The `ridges.geojson` rule allows LineString add, modify and delete. `kind` is `ridge`, and `summit` and `summitName`
+stay optional together when a summit is linked. It does not carry `sunlitSide` or `shadedSide`: all 31 ridges stored the
+same `south` and `north` text, no renderer read those sides, and the sun's direction is already the derivation's one
+`SUN_AZIMUTH_DEGREES` convention. Storing it on each ridge would repeat one fact many times, so the data step stops
+writing both properties when it emits version 4. A new or moved ridge must lie inside one green area, and each end must
+meet that area's outline or another ridge. `editor-layers.schema.json` has no field for that topology, so the contract
+states it here: the data step's `check-data` enforces both rules, and the importer runs `check-data` on every changeset.
+The shared `editor-layers.json` still carries the version-3 slope rule while the producer emits version 3; the Editor's
+version-4 step on #490 removes it, derives slope faces in its preview and stops editing slopes directly. Consumers
+pinned to the previous release keep reading frozen version 3, and this release changes no consumer pin. The Editor reads
+version 4 in its own step before data emits it.
 
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows: operations, geometry
 types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the
