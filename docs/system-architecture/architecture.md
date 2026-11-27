@@ -31,8 +31,8 @@ Projects depend on each other only through these concrete contracts:
 | Local map-core, unreleased                     | packages/map-core  | apps/core-demo dev, CI artifact and dev Pages builds; apps/web and apps/editor local builds and ci-publish dev-image/Pages builds |
 | Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                                |
 | Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                                |
-| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                          |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration                                            |
+| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app and map-core tests, backend generate-check and release generation, platform hosting tests, pinned                             |
+| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration, backend dev generation                    |
 | Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                                 |
 | Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                         |
 | Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                            |
@@ -112,7 +112,7 @@ or bundle sources take their contract location from the caller and never resolve
 
 ### Contract modes
 
-Shared formats reach consumers in three operative modes:
+Shared formats reach app and integration consumers in three operative modes; backend generation has its own split below:
 
 1. App tests (unit, built, browser and offline-check), every app's `build-release` and platform's hosting-test web build
    read the exact `@ivanov-gv/map-contracts` release pinned in their owning manifest. App test targets set
@@ -120,14 +120,19 @@ Shared formats reach consumers in three operative modes:
    change selects no app pipeline.
 2. Plain dev and CI artifact builds on main, including ci-publish's `pages` job and the content cd-dev-pages deploys,
    read repository `packages/contracts` at HEAD. Each of the three apps has one build resolver that defaults to that
-   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. Every app's
-   `build-release` pins contracts too, as a future app production release will. No production app release exists yet.
+   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. Backend dev
+   generation has a like resolver in `tools/contracts-root.sh`. Every app's `build-release` pins contracts too, as a
+   future app production release will. No production app release exists yet.
 3. Cross-project integration tests read repository contracts at HEAD through one helper, which honours
    `MAP_CONTRACTS_ROOT`. Before promoting a release, `tests/` installs the exact package and sets
    `MAP_CONTRACTS_VERSION` so the whole suite tests the candidate.
 
-`map-core` and `services/backend` read contracts only from tests or generation, so they stay pinned. Data validation
-reads HEAD contracts through its own producer path. See
+`map-core` reads contracts only from tests, so it stays pinned. services/backend owns a fourth mode: dev generation
+reads HEAD through `tools/contracts-root.sh` and honours `MAP_CONTRACTS_ROOT`, while `generate-check`,
+`generate-release` and `build-release` read the exact pin and refuse another root. Regular Go builds and tests use
+committed bindings and a checked-in fixture, so they need no installed package. CI's backend check does not call
+`generate-check`, so it does not compare those bindings with the pin; enforcing that comparison in CI would require
+installing the pin there. Data validation reads HEAD contracts through its own producer path. See
 [releasing map contracts](../runbooks/release.md#releasing-map-contracts).
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then
