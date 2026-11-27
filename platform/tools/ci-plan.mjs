@@ -280,7 +280,13 @@ const DEDICATED_BASE_REF = 'refs/ci-plan/base';
 export function resolveBaseRef(baseRef, head = 'HEAD', options = {}) {
   // eslint-disable-next-line no-control-regex -- base refs must not contain control characters.
   const hasControlChars = /[\u0000-\u001f\u007f]/.test(baseRef);
-  if (typeof baseRef !== 'string' || baseRef === '' || baseRef.startsWith('-') || hasControlChars) {
+  if (
+    typeof baseRef !== 'string' ||
+    baseRef === '' ||
+    baseRef.startsWith('-') ||
+    hasControlChars ||
+    baseRef.includes('@{')
+  ) {
     throw new Error(`invalid base ref: ${baseRef}`);
   }
   const cwd = options.cwd ?? process.cwd();

@@ -283,15 +283,15 @@ request, the planner validates the base branch name with `git check-ref-format -
 that merge base, so merging the base branch into the PR does not add the base branch's own changes to the plan. Push and
 `workflow_dispatch` runs keep their existing bases (`github.event.before` or `origin/main`) and diff the checked-out
 head. If the base cannot be resolved or diffed, or the base ref is invalid, the planner selects everything, reports a
-visible reason, and marks workflow proofs as undetermined; `CI gate` fails in that case because required workflow proofs
-cannot be determined. A push to main triggers `ci-publish` independently — it builds and pushes images, packages, and
-the dev site image (it runs no checks because the PR run already tested the content). `ci-publish` has its own test-run
-switch and planner (shared with `ci-pr-checks` through a composite action at `.github/actions/plan`). The `pages` job in
-`ci-publish` builds the dev site from source and pushes `$IMAGE_REPOSITORY/dev-pages:<sha>`. When `ci-publish` completes
-successfully on `main`, `cd-dev-pages` is triggered via `workflow_run` — it pulls the image by commit SHA, extracts the
-site, and deploys it to GitHub Pages. `ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`; its
-nightly schedule is paused (issue #319), so it runs only when dispatched until the cron is uncommented. To see what a
-branch would select:
+visible reason, and marks workflow proofs as undetermined; on a pull request, `CI gate` fails in that case because
+required workflow proofs cannot be determined. A push to main triggers `ci-publish` independently — it builds and pushes
+images, packages, and the dev site image (it runs no checks because the PR run already tested the content). `ci-publish`
+has its own test-run switch and planner (shared with `ci-pr-checks` through a composite action at
+`.github/actions/plan`). The `pages` job in `ci-publish` builds the dev site from source and pushes
+`$IMAGE_REPOSITORY/dev-pages:<sha>`. When `ci-publish` completes successfully on `main`, `cd-dev-pages` is triggered via
+`workflow_run` — it pulls the image by commit SHA, extracts the site, and deploys it to GitHub Pages. `ci-nightly`
+checks everything by calling `ci-pr-checks` with `run_all: true`; its nightly schedule is paused (issue #319), so it
+runs only when dispatched until the cron is uncommented. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main

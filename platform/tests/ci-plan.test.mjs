@@ -593,11 +593,56 @@ test('a PR plans only its own changes against the current base branch, even when
   const staleTracking = git(local, 'rev-parse', 'refs/remotes/origin/main').trim();
   git(local, 'fetch', '-q', 'origin', 'refs/heads/main:refs/tmp/main');
   git(local, 'update-ref', 'refs/remotes/origin/main', staleTracking);
+  // A local tag named origin/main must not shadow the fetched base branch.
+  git(local, 'tag', 'origin/main', staleTracking);
   assert.notEqual(git(local, 'rev-parse', 'refs/remotes/origin/main').trim(), currentMain);
 
   // Merging main into the PR makes the PR head contain main's own change.
   git(local, 'merge', '-qm', 'merge main', 'refs/tmp/main');
   const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
+    cwd: local,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+  assert.match(plan, /^Selected a subset of pipelines\.$/m, plan);
+  assert.match(plan, /^- Folders: docs$/m, plan);
+  assert.doesNotMatch(plan, /\bbackend\b/, plan);
+});
+
+test('PR planning uses the provided head when checkout HEAD differs from the PR head', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-pr-head-diff-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const origin = path.join(root, 'origin');
+  const local = path.join(root, 'local');
+  const git = (cwd, ...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd,
+      encoding: 'utf8'
+    });
+
+  git(root, 'init', '-q', '-b', 'main', origin);
+  fs.mkdirSync(path.join(origin, 'docs'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'docs/readme.md'), 'base\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'base');
+  git(root, 'clone', '-q', origin, local);
+
+  git(local, 'checkout', '-qb', 'pr');
+  fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'pr docs change');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
+  // Make checkout HEAD different from the PR head.
+  git(local, 'checkout', '-q', 'main');
+  fs.mkdirSync(path.join(local, 'services/backend/cmd/server'), {recursive: true});
+  fs.writeFileSync(path.join(local, 'services/backend/cmd/server/main.go'), 'package main\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'local checkout change');
+  assert.notEqual(git(local, 'rev-parse', 'HEAD').trim(), prHead);
 
   const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
   const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {

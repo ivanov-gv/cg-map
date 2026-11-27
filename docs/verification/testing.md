@@ -69,8 +69,8 @@ authoritative for this layout.
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
 everything. For a pull request the planner diffs the PR head against the merge base with the current base branch,
 fetched by full branch ref into a dedicated ref; push and dispatch keep their existing bases. If changed files or
-required workflow proofs cannot be determined, the planner selects everything and `CI gate` fails. See
-[Testing workflows](../../.github/TESTING.md#through-a-real-pr) for the authoritative plan-base rules. The same gate
+required workflow proofs cannot be determined, the planner selects everything and, on a pull request, `CI gate` fails.
+See [Testing workflows](../../.github/TESTING.md#through-a-real-pr) for the authoritative plan-base rules. The same gate
 calls each changed `ci-*` workflow in test-run mode and asks `ci-workflows` to dispatch and wait for each changed `cd-*`
 workflow, so a workflow change is proved by real GitHub runs, not by a re-runnable evidence check.
 [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own test-run

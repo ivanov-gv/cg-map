@@ -368,7 +368,8 @@ jobs:
       PLAN_RESULT: ${{ needs.plan.result }}
       PLAN_TEST_RUN_RESULT: ${{ needs.plan-test-run.result }}
       CD_TEST_RUNS: ${{ needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]' }}
-      PROOFS_DETERMINED: ${{ needs.plan.outputs.proofs_determined || needs.plan-test-run.outputs.proofs_determined || 'true' }}
+      PLAN_PROOFS_DETERMINED: ${{ needs.plan.outputs.proofs_determined }}
+      PLAN_TEST_RUN_PROOFS_DETERMINED: ${{ needs.plan-test-run.outputs.proofs_determined }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN_ID: ${{ github.run_id }}
@@ -390,9 +391,17 @@ jobs:
             echo "::error::Nothing planned this run, so nothing was checked."
             exit 1
           fi
-          if [ "$PROOFS_DETERMINED" != true ]; then
-            echo "::error::Changed files could not be determined, so required workflow proofs are unknown."
-            exit 1
+          if [ "$EVENT_NAME" = pull_request ]; then
+            proofs_determined=missing
+            if [ "$PLAN_RESULT" = success ]; then
+              proofs_determined=${PLAN_PROOFS_DETERMINED:-missing}
+            elif [ "$PLAN_TEST_RUN_RESULT" = success ]; then
+              proofs_determined=${PLAN_TEST_RUN_PROOFS_DETERMINED:-missing}
+            fi
+            if [ "$proofs_determined" != true ]; then
+              echo "::error::Changed files could not be determined, so required workflow proofs are unknown."
+              exit 1
+            fi
           fi
           echo "CI gate passed." | tee -a "$GITHUB_STEP_SUMMARY"
       # act copies the worktree instead of performing a sparse checkout, so it cannot catch mistakes here.
