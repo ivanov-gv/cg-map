@@ -93,6 +93,7 @@ let activeEntries = [];
 let areGuidesVisible = true;
 let isSatelliteVisible = false;
 let isLayerLoading = false;
+let isSourceLoading = false;
 let rules;
 let levels;
 let session;
@@ -105,6 +106,7 @@ let pendingLayer = null;
 let objectList;
 let clickCandidates = null;
 let pendingPick = null;
+let pendingSourceLoad = null;
 let activeFilter = null;
 let pendingSelection = null;
 let resolvingItem = null;
@@ -363,21 +365,59 @@ function toggleGuides() {
   clickCandidates = null;
   overlay.setGuidesVisible(areGuidesVisible);
   elementById('edit-guides').setAttribute('aria-pressed', String(areGuidesVisible));
-  showLoadingStatus();
+  if (!isSourceLoading) setStatus(layerStatus());
+  deferInteractionUntilRender();
 }
 
-// setData finishes in a worker. MapLibre reports idle only once the current data has rendered.
+// A source worker signals content before the next paint. The visible status follows that signal, while clicks, the
+// object list and selection keep waiting for the rendered layer, which a slow device may paint much later.
 function showLoadingStatus() {
   isLayerLoading = activeLayer !== null;
-  if (isLayerLoading) setStatus(`Loading ${activeLayer.name}…`, true);
+  isSourceLoading = isLayerLoading;
+  if (isLayerLoading) {
+    setStatus(`Loading ${activeLayer.name}…`, true);
+    watchSourceLoad('editor-source');
+  } else {
+    stopWatchingSourceLoad();
+    setStatus(layerStatus());
+  }
   renderObjectList();
 }
 
+// A presentation change has no new source content, so only its rendered state gates further interaction.
+function deferInteractionUntilRender() {
+  if (!activeLayer) return;
+  isLayerLoading = true;
+  renderObjectList();
+}
+
+function watchSourceLoad(sourceId) {
+  stopWatchingSourceLoad();
+  const source = map.getSource(sourceId);
+  if (!source || map.isSourceLoaded(sourceId)) return finishSourceLoading();
+  const handler = event => {
+    if (event.sourceDataType !== 'content') return;
+    finishSourceLoading();
+  };
+  pendingSourceLoad = {source, handler};
+  source.on('data', handler);
+}
+
+function stopWatchingSourceLoad() {
+  if (!pendingSourceLoad) return;
+  pendingSourceLoad.source.off('data', pendingSourceLoad.handler);
+  pendingSourceLoad = null;
+}
+
+function finishSourceLoading() {
+  if (!isSourceLoading) return;
+  stopWatchingSourceLoad();
+  isSourceLoading = false;
+  setStatus(layerStatus());
+}
+
 function finishLayerLoading() {
-  if (isLayerLoading) {
-    isLayerLoading = false;
-    setStatus(layerStatus());
-  }
+  isLayerLoading = false;
   if (pendingSelection) {
     const entry = pendingSelection;
     pendingSelection = null;
@@ -938,11 +978,24 @@ function installWorkspaceControls() {
   installInspectorViewport();
 }
 
+// Software WebGL spends seconds compiling and rasterising shaders, which delays every map move. Draw at quarter scale
+// there so an edit still appears at once; a hardware renderer keeps its normal resolution.
+function softwareRendererPixelRatio() {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+  const info = context?.getExtension('WEBGL_debug_renderer_info');
+  const renderer = info ? String(context.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
+  context?.getExtension('WEBGL_lose_context')?.loseContext();
+  return /swiftshader|llvmpipe|software/i.test(renderer) ? 0.25 : null;
+}
+
 async function createEditorMap(mapMetadata) {
   if (!archiveFilenamePattern.test(mapMetadata.archive)) throw new Error('Invalid map archive metadata.');
   registerArchiveProtocol(maplibregl, pmtiles);
   const basemapURL = 'pmtiles://' + new URL(`data/${mapMetadata.archive}`, location.href).href;
+  const pixelRatio = softwareRendererPixelRatio();
   map = createMap({engine: maplibregl, container: 'map', basemapURL, assetBaseURL: location.href});
+  if (pixelRatio) map.setPixelRatio(pixelRatio);
   // Exposed for browser tests and manual inspection, like the public app's kompasDebug.
   window.editorDebug = {
     get map() {

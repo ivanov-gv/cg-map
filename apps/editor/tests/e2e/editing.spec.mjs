@@ -321,15 +321,37 @@ test.describe('source editing', () => {
         window.statusFocusCount += 1;
         window.statusAtFocus = status.textContent;
       });
+      // Hold the rendered-state notification while the real source worker loads.
+      const {map} = window.editorDebug;
+      const originalFire = map.fire;
+      map.fire = function (event, ...argumentsAfterEvent) {
+        const type = typeof event === 'string' ? event : event.type;
+        if (type === 'idle') return this;
+        return originalFire.call(this, event, ...argumentsAfterEvent);
+      };
+      window.releaseModeIdle = () => {
+        map.fire = originalFire;
+        map.fire('idle');
+      };
     });
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#status')).toBeFocused();
     expect(await page.evaluate(() => window.statusAtFocus)).toBe('Loading Places & points…');
+    await expect.poll(() => page.evaluate(() => window.editorDebug.map.isSourceLoaded('editor-source'))).toBe(true);
+    await expect(page.locator('#status')).toContainText('objects');
     await expect(page.locator('#status')).not.toHaveClass(/attention/);
     await expect(page.locator('#status')).toBeFocused();
     expect(await page.evaluate(() => window.statusFocusCount)).toBe(1);
     await expect(page.locator('#status')).toHaveCSS('clip-path', 'none');
+    await openPanel(page, 'Tools');
+    await page.locator('#open-objects').click();
+    await expect(page.locator('#objects-status')).toHaveText('Loading objects…');
+    await page.evaluate(() => {
+      window.releaseModeIdle();
+      delete window.releaseModeIdle;
+    });
+    await expect(page.locator('#objects-status')).toHaveText(/objects$/);
     const {changeset} = await exportChangeset(page, testInfo);
     expect(changeset.operations[0].after.properties.name).toBe(editedName);
   });
