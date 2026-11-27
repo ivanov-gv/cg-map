@@ -167,7 +167,7 @@ const entranceDetail = ({properties}) =>
 const placeDetail = ({properties}) =>
   [properties.kind, properties.level && `floor ${properties.level}`].filter(Boolean).join(' · ');
 
-function nextEntranceNumber(entrances) {
+export function nextEntranceNumber(entrances) {
   const numbers = entrances.map(({feature}) => Number(feature.properties.ref)).filter(Number.isInteger);
   return String(Math.max(0, ...numbers) + 1);
 }
