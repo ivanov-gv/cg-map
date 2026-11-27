@@ -52,7 +52,8 @@ for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
 // Web and editor own the same guard in their own tests/pinned-data.test.mjs. Register a new core-demo test-only tool
 // here; a tool used by a build stays out, because dev and release builds read the repository's data.
 const TEST_ONLY_APP_TOOLS = [];
-const pinnedDataRule = 'core-demo tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
+const testFilePattern = /\.(?:test|spec)\.m?js$/;
+const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
 const repositoryDataPattern = new RegExp(
   [
     '(?:\\.\\./)+data(?:/|[\'"`])',
@@ -62,11 +63,12 @@ const repositoryDataPattern = new RegExp(
 );
 for (const application of ['apps/core-demo']) {
   const configFile = `${application}/playwright.config.mjs`;
-  const testFiles = [
+  const testFiles = [...new Set([
     ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),
+    ...walk(application).filter(file => testFilePattern.test(file) && !file.includes('/node_modules/')),
     ...(fs.existsSync(configFile) ? [configFile] : []),
     ...TEST_ONLY_APP_TOOLS.filter(file => file.startsWith(`${application}/`))
-  ];
+  ])];
   for (const file of testFiles) {
     assert.ok(
       !repositoryDataPattern.test(fs.readFileSync(file, 'utf8')),
@@ -150,7 +152,7 @@ for (const component of ['apps/web', 'services/backend', 'services/transit-relay
 // itself in apps/web/tools/runtime-modules.mjs, including nested modules and the ADR 0015 gesture rule.
 for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) {
   // Source-owned unit tests live next to code in these components; boundary checks apply to runtime modules only.
-  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !file.endsWith('.test.js'))) {
+  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !testFilePattern.test(file))) {
     const text = fs.readFileSync(file, 'utf8');
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);
     for (const match of text.matchAll(moduleDependencyPattern)) {

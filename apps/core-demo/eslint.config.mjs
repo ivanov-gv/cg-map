@@ -9,7 +9,15 @@ const toolFiles = [...nodeToolFiles, 'tools/**/*.js'];
 const sourceTestFiles = ['src/**/*.test.js'];
 const browserTestFiles = ['src/**/*.browser.test.js'];
 const unitTestFiles = ['src/**/!(*.browser).test.js'];
-const nodeFiles = [...nodeToolFiles, 'e2e/**/*.js', 'tests/**/*.mjs', ...unitTestFiles, '*.mjs'];
+const nodeFiles = [
+  ...nodeToolFiles,
+  'tools/**/*.test.js',
+  'e2e/**/*.js',
+  'tests/**/*.mjs',
+  'tests/**/*.test.js',
+  ...unitTestFiles,
+  '*.mjs'
+];
 
 export default [
   {ignores: ['node_modules/**', 'dist/**', '.build/**']},

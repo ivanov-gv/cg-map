@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateStyleMin} from '@maplibre/maplibre-gl-style-spec';
-import {mapStyle} from '../src/map-style.js';
-import {installSatellite, setSatelliteVisible, satelliteBounds, satelliteLayerIds} from '../src/satellite.js';
+import {mapStyle} from './map-style.js';
+import {installSatellite, setSatelliteVisible, satelliteBounds, satelliteLayerIds} from './satellite.js';
 
 test('satellite uses bounded local imagery below labels and toggles without replacing the map', () => {
   const assetBaseURL = 'https://ivanov-gv.github.io/cg-map/';

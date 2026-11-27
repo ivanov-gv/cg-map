@@ -29,6 +29,7 @@ class ExtractionState:
     # Counts written beside the reviewed source provenance.
     building_counts: dict = field(default_factory=dict)
     railway_counts: dict = field(default_factory=dict)
+    bridge_counts: dict = field(default_factory=dict)
     municipality_areas: list = field(default_factory=list)
     municipality_sources: list = field(default_factory=list)
     municipality_features: list = field(default_factory=list)
