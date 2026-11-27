@@ -22,6 +22,8 @@ export const basemapColors = {
   canyonWallAtWater: '#a69880',
   canyonWallAtRim: '#e2dbcb',
   canyonRim: '#d3cab8',
+  // Neutral grey deck surface, kept distinct from the warm building fill and from water and ground.
+  bridgeDeck: '#c9c9c6',
   bridgeDeckEdge: '#4e463c',
   building: '#d9d0c9',
   buildingOutline: '#c7bcb1',
