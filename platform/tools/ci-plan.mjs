@@ -65,6 +65,7 @@ const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 const HEAD_DATA_CONSUMERS = ['tests'];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
 const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
+const LOCKFILE = 'package-lock.json';
 // Returns config paths for known projects that have one under root. A missing config leaves that project on the root
 // file and outside the shared-rule consumers; tests use scratch fixtures, not the current checkout's config set.
 export function discoveredLintConfigs(root = process.cwd()) {
@@ -150,11 +151,65 @@ export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
   return EVERYTHING;
 }
 
+// Returns the pipeline of the workspace that owns a lockfile entry, or '' when no project owns it.
+function workspacePipeline(lockfileEntry) {
+  const workspace = Object.keys(PROJECT_PIPELINES)
+    .filter(project => lockfileEntry === project || lockfileEntry.startsWith(`${project}/`))
+    .sort((left, right) => right.length - left.length)[0];
+  return workspace ? PROJECT_PIPELINES[workspace] : '';
+}
+
+// Fail-safe result: the reason reaches the summary and the optional error reaches the action log.
+function everythingPlan(reason, error = '') {
+  return {folders: FOLDERS, everything: true, reason, error};
+}
+
+// Compares the two committed lockfiles and returns the projects whose `packages` entries differ. Shared or unknown
+// entries, and unreadable or unparsable files, select everything because they can affect any project.
+function planLockfileChanges(base, head) {
+  const packagesByRevision = {};
+  for (const [name, revision] of [
+    ['base', base],
+    ['head', head]
+  ]) {
+    let source;
+    try {
+      source = execFileSync('git', ['show', `${revision}:${LOCKFILE}`], {encoding: 'utf8'});
+    } catch (error) {
+      return everythingPlan('lockfile read failed', `Could not read ${name} lockfile at ${revision}: ${error.message}`);
+    }
+    try {
+      const packages = JSON.parse(source).packages;
+      if (!packages || typeof packages !== 'object' || Array.isArray(packages)) throw new Error('no packages map');
+      packagesByRevision[name] = packages;
+    } catch (error) {
+      return everythingPlan('lockfile parse failed', `Could not parse ${name} lockfile: ${error.message}`);
+    }
+  }
+
+  const entries = new Set([...Object.keys(packagesByRevision.base), ...Object.keys(packagesByRevision.head)]);
+  const folders = new Set();
+  for (const entry of entries) {
+    const isUnchanged = JSON.stringify(packagesByRevision.base[entry]) === JSON.stringify(packagesByRevision.head[entry]);
+    if (isUnchanged) continue;
+    if (entry === '' || entry.startsWith('node_modules/')) return everythingPlan('shared lockfile entry');
+    const pipeline = workspacePipeline(entry);
+    if (!pipeline) return everythingPlan('unmapped lockfile entry', `Unknown lockfile entry ${entry}`);
+    folders.add(pipeline);
+  }
+  return {folders: FOLDERS.filter(folder => folders.has(folder)), everything: false, reason: '', error: ''};
+}
+
 // An empty list means the diff could not be trusted, so it selects everything too.
 export function planChanges(files, options = {}) {
   if (files.length === 0) return {...EVERYTHING, everything: true};
   const lintConfigFiles = options.lintConfigFiles ?? discoveredLintConfigs();
-  const results = files.map(file => classify(file, lintConfigFiles));
+  // The lockfile needs git, so callers pass its compared folders; without them the default still selects everything.
+  const lockfileFolders = files.includes(LOCKFILE) ? options.lockfileFolders : undefined;
+  const results = files
+    .filter(file => file !== LOCKFILE || lockfileFolders === undefined)
+    .map(file => classify(file, lintConfigFiles));
+  if (lockfileFolders !== undefined) results.push({folders: lockfileFolders});
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   return {folders, everything: folders.length === FOLDERS.length};
 }
@@ -245,6 +300,14 @@ function main(args) {
       plan = planChanges([]);
       reason = 'diff failed';
     }
+  }
+  if (changedFiles.includes(LOCKFILE)) {
+    const lockPlan = planLockfileChanges(base, head);
+    if (lockPlan.error) console.log(`::warning::${lockPlan.error}, so everything runs`);
+    if (lockPlan.reason) reason = lockPlan.reason;
+    plan = lockPlan.everything
+      ? planChanges([])
+      : planChanges(changedFiles, {lockfileFolders: lockPlan.folders});
   }
 
   const summary = formatSummary(plan, reason, changedFiles);
