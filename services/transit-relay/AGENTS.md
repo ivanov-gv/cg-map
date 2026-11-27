@@ -7,7 +7,7 @@ Keep the upstream fixed, the API read-only, and refreshes bounded/cached. Never 
 credentials, or headers. Do not invent vehicle identity or GPS age. Preserve stale/expiry behavior and coordinate
 validation.
 
-Node relay tests are optional for iterating; the pre-push hook's root `make check` is required (builds and non-browser
-checks, no browser suites). GitHub's transit-relay pipeline and `CI gate` gate the merge. Hosted updates must sync
-canonical relay.mjs into the recorded Site source; preserve its identity and audience. Never embed private service
-credentials in the web client.
+Node relay tests are optional for iterating; the pre-push hook runs the checks selected by the pushed diff (builds and
+non-browser checks, no browser suites, `make check` on failure). GitHub's transit-relay pipeline and `CI gate` gate the
+merge. Hosted updates must sync canonical relay.mjs into the recorded Site source; preserve its identity and audience.
+Never embed private service credentials in the web client.

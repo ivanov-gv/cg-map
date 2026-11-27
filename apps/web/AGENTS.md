@@ -48,9 +48,9 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   [focused browser commands](README.md#focused-browser-checks). npm test in this workspace builds before local web
   tests. Run `make verify` or `npm run verify` from apps/web for the same component checks.
 - Full `make -C apps/web e2e` is optional for iterating after a web/UI, offline, or release behavior change, covering
-  both deployment projects; the pre-push `make check` is required (builds and non-browser checks, no browser suites).
-  GitHub's PR run gates the merge. Install Chromium first with `npm run browser:install -- chromium` from apps/web if
-  needed.
+  both deployment projects; the pre-push hook runs the checks selected by the pushed diff (no browser suites,
+  `make check` on failure). GitHub's PR run gates the merge. Install Chromium first with
+  `npm run browser:install -- chromium` from apps/web if needed.
 - Standalone browser commands build first. Use `make -C apps/web e2e-built` only after a successful web build (as CI
   does after building the artifact); the built-artifact variant never refreshes the artifact. Browser output stays in
   test-results/ inside this component.

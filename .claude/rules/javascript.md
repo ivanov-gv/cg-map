@@ -82,6 +82,6 @@ shared rules. That migration and the later root cleanup bound the transition; th
 - A browser test waits for a state: an event, or a poll on a condition. A fixed delay is not synchronization. A failure
   seen only with parallel workers is not a flake to dismiss: investigate both races and resource limits (frame rate,
   time budgets), record the worker count and machine capacity, and keep its assertions.
-- `make verify PKG=<component>` and browser suites are optional for iterating; the pre-push hook's `make check` is
-  required (builds and non-browser checks, no browser suites). A PR merges only when its tests pass on GitHub
-  ([the rule](.github/TESTING.md)).
+- `make verify PKG=<component>` and browser suites are optional for iterating; the pre-push hook runs the checks
+  selected by the pushed diff, with no browser suites and `make check` as the fail-safe. A PR merges only when its tests
+  pass on GitHub ([the rule](.github/TESTING.md)).
