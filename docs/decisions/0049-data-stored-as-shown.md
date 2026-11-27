@@ -24,7 +24,31 @@ previewed at once. If the Editor has a copy, the two can disagree. The owner dec
 - **An edit cannot create an inconsistency by its design.** Where two objects must agree, one edit changes both. For
   example, moving a shared municipality border moves it in both polygons at once.
 - **One rule validates one file.** Objects that must agree live in the same file, so their check and the edit that keeps
-  them consistent read one file. Cross-file validations are avoided.
+  them consistent read one file.
+- **Following a link is the only computation and the only cross-file check.** An object may link to an object in another
+  file by its `entityId`. A cross-file check only confirms that the target exists. The build copies a linked value into
+  the tiles, such as a street's name onto its roads, and the Editor's preview makes the same copy. Nothing else is
+  computed from another object, because that would need the same computation in data and in the Editor.
+- **Style reads only the feature's own properties.** map-core may choose a look from a feature's own values: a road from
+  its type and its `layer`, `bridge` and `tunnel` tags, a POI's icon from its kind, a settlement's size from `place` and
+  `population`. A look never depends on another object, such as a road on the green area it crosses.
+- **Tiles are build output.** The build publishes stored features into tile layers, cut and simplified per zoom, and
+  copies stored or linked values. It computes no new value.
+- **One object, one feature, one identity.** Each object has one `entityId`: the OSM identity, or `local:<uuid>` when
+  made in the Editor. No property copies it. A POI that is another object, such as a hotel building, a summit that is a
+  viewpoint, or a lake that is an attraction, lives on that object, with its tags and a stored `iconPoint`, so both its
+  outline and its icon open the same card. A POI that only stands inside another object keeps its own feature and a link
+  to that object.
+- **A concept the map shows is an object, even without a shape.** A street is an object with its name, and the road ways
+  of the street link to it. A junction where something is stated about it, such as a level above or below ground, a
+  crossing or a turn restriction, is a point object that the roads meeting there link to.
+- **Labels and icons are stored where they are shown.** A label point, a label line or an icon point is a stored value
+  that the owner can move, never a position computed by the build.
+- **New structures are seeded once, and no value is invented.** A change of structure seeds the new shape once from
+  today's data, so the map looks as before. A value that the sources do not have stays absent. For example, a summit
+  without an OSM height shows no height.
+- **OSM's shape is converted only at its boundary.** An OSM import groups and links what OSM stores differently, such as
+  the ways of a street. An export writes OSM's form back, such as `addr:street`. Nothing between the two converts again.
 
 ## Consequences
 
