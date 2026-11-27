@@ -37,16 +37,15 @@ it.
 
 ## Lint configuration
 
-Migrated projects own `eslint.config.mjs` beside their Makefile or package.json and choose their own file patterns and
-globals; ESLint finds it from the folder the lint command runs in. Their rule sets live in
-[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`. The
-pre-commit hook uses a staged file's own config when it has one and the root config otherwise;
-[ci-plan](platform/tools/ci-plan.mjs)'s tests cover pipeline selection. The six non-app projects, apps/editor and
-apps/core-demo consume the shared rules; apps/web still uses the unchanged root config until its own migration PR. It
-imports ESLint's own presets directly, not the shared module, and some of its app rules may temporarily duplicate future
-shared rules. That migration and the later root cleanup bound the transition; the current split is in
-[architecture](docs/system-architecture/architecture.md#independent-projects). See
-[ADR 0043](docs/decisions/0043-project-owned-eslint-configurations.md).
+Every project that lints owns `eslint.config.mjs` beside its Makefile or package.json and chooses its own file patterns
+and globals; ESLint finds it from the folder the lint command runs in. Their rule sets live in
+[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`,
+which also rejects a new root-level config. The pre-commit hook lints each staged file from its owning project;
+[ci-plan](platform/tools/ci-plan.mjs)'s tests cover pipeline selection. All nine linting projects consume the shared
+rules, including apps/web; the root config is retired and a change to that path selects only platform tooling. Each
+app's lint-config test checks its own patterns and rules. See
+[ADR 0043](docs/decisions/0043-project-owned-eslint-configurations.md) and the consumer list in
+[architecture](docs/system-architecture/architecture.md#independent-projects).
 
 ## Code
 

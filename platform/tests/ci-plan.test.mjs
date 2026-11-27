@@ -298,7 +298,7 @@ test('shared-rule consumers follow scratch configs, including a migrated and an 
 
   const plan = planChanges(['platform/eslint-rules.mjs'], {lintConfigFiles});
   assert.deepEqual(new Set(plan.folders), new Set(['data', 'transit-relay', 'apps-web']));
-  assert.ok(!plan.folders.includes('apps-editor'), 'the unmigrated app stays on the root config');
+  assert.ok(!plan.folders.includes('apps-editor'), 'a fixture without an app config is not a shared-rule consumer');
   assert.equal(plan.areas, undefined);
   assert.equal(plan.everything, false);
   assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}]);
@@ -316,12 +316,11 @@ test('a new project config joins the shared-rule consumers without a code change
   assert.equal(after.areas, undefined);
 });
 
-test('the root lint config keeps every pipeline while it serves the apps', () => {
-  // The root file owns the apps' lint; a folder selection also calls its browser workflow, so narrowing it here would
-  // hide checks. The final foundation diff does not change this file.
+test('the retired root lint config selects only platform tooling', () => {
+  // Every linting project owns a config now, so removing the root file changes the hook and layout checks, not app lint.
   const plan = planChanges(['eslint.config.mjs']);
-  assert.deepEqual(plan, {folders: FOLDERS, everything: true});
-  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}, {app: 'editor'}, {app: 'core-demo'}]);
+  assert.deepEqual(plan, {folders: ['platform'], everything: false});
+  assert.deepEqual(imageMatrix(plan.folders).include, []);
 });
 
 test('outputs give every folder a value and the selected test runs', () => {

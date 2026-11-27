@@ -11,7 +11,7 @@ test('an app file without its own config keeps its root-relative path', () => {
   ]);
 });
 
-test('a project config lints its files from that project, while the rest use the root config', () => {
+test('a project config lints its files from that project, while unowned files keep root-relative paths', () => {
   const files = ['data/tools/build.mjs', 'apps/editor/tools/run.mjs', 'eslint.config.mjs'];
   assert.deepEqual(lintGroups(files, configExists), [
     {cwd: 'data', files: ['tools/build.mjs']},
