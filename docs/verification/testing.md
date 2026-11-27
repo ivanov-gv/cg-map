@@ -65,10 +65,12 @@ authoritative for this layout.
 
 [ci-pr-checks](../../.github/workflows/ci-pr-checks.yml) calls one workflow per project, chosen from the diff by
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
-everything. The same gate calls each changed `ci-*` workflow in test-run mode and asks `ci-workflows` to dispatch and
-wait for each changed `cd-*` workflow, so a workflow change is proved by real GitHub runs, not by a re-runnable evidence
-check. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own
-test-run switch and planner (shared with ci-pr-checks through a composite action), building and pushing images and
+everything. For a pull request the plan base is the merge base with the current base branch; push and dispatch keep
+their existing bases. See [Testing workflows](../../.github/TESTING.md#through-a-real-pr) for the authoritative
+plan-base rules. The same gate calls each changed `ci-*` workflow in test-run mode and asks `ci-workflows` to dispatch
+and wait for each changed `cd-*` workflow, so a workflow change is proved by real GitHub runs, not by a re-runnable
+evidence check. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its
+own test-run switch and planner (shared with ci-pr-checks through a composite action), building and pushing images and
 packages — it runs no tests as the PR run already tested the content. The `pages` job in ci-publish builds the dev site
 from source and pushes the image. [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) pulls that image and deploys
 it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs every night by calling ci-pr-checks with

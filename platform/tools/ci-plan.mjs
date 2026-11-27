@@ -270,9 +270,14 @@ export function formatSummary({folders, everything}, reason, changedFiles = []) 
   ].join('\n');
 }
 
+const VALID_BASE_REF = /^[A-Za-z0-9._/-]+$/;
+
 // A PR base SHA recorded by GitHub goes stale after the branch merges main, so PR planning uses the merge base with
 // the current base branch instead. Fetching updates the remote ref; the full checkout already has the history.
 export function resolveBaseRef(baseRef, head = 'HEAD', options = {}) {
+  if (!VALID_BASE_REF.test(baseRef) || baseRef.startsWith('-') || baseRef.includes('..')) {
+    throw new Error(`invalid base ref: ${baseRef}`);
+  }
   const cwd = options.cwd ?? process.cwd();
   const git =
     options.git ?? ((args, runOptions = {}) => execFileSync('git', args, {cwd, encoding: 'utf8', ...runOptions}));

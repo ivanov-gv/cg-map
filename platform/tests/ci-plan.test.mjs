@@ -659,3 +659,29 @@ test('a base ref that cannot be resolved selects everything with a reason', t =>
   });
   assert.match(result, /Selected everything \(base ref failed\)\./, result);
 });
+
+test('an invalid base ref is rejected before git and selects everything with a visible reason', t => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-invalid-ref-'));
+  t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
+  const git = (...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd: repo,
+      encoding: 'utf8'
+    });
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  git('init', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(repo, 'readme.md'), 'base\n');
+  git('add', '.');
+  git('commit', '-qm', 'base');
+
+  for (const baseRef of ['--upload-pack=evil', '../evil', 'main..other', 'name with space']) {
+    assert.throws(() => resolveBaseRef(baseRef, 'HEAD', {cwd: repo}), /invalid base ref/);
+    const result = execFileSync('node', [planner, '--base-ref', baseRef], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: plannerEnv
+    });
+    assert.match(result, /Selected everything \(base ref failed\)\./, `${baseRef}: ${result}`);
+    assert.match(result, /invalid base ref/, `${baseRef}: ${result}`);
+  }
+});
