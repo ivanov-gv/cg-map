@@ -28,9 +28,11 @@ and web are unchanged here, and selecting editor pipelines when core changes bel
 
 ## Outcome: Web follows the same split (2026-11-27, #424)
 
-Web applies the same decision through its own `tools/core-root.mjs`: `build`, `dev`, `dev-mock` and the Pages build take
-map-core, data and contracts from the checked-out commit. `make -C apps/web build-release` and the existing
-`npm run release:prepare` take the exact pins in `apps/web/package.json` and refuse any other core, data or contracts
-root. Automated Web tests keep reading the pins, so a package change cannot change a test without an intentional bump.
-The reason is unchanged — the dev stand previews main, while a release ships exactly what the project pins — so this
-needs no new decision record. Selecting consumer pipelines when a producer changes remains a later step of #424.
+Web applies the same decision through its own `tools/core-root.mjs`: plain `build`, `dev`, `dev-mock` and the ci-publish
+image/Pages builds take map-core, data and contracts from the checked-out commit. Verification targets and
+`make -C apps/web build-release`, which the existing `npm run release:prepare` delegates to, take the exact pins in
+`apps/web/package.json` and refuse any other core, data or contracts root. Platform's hosting test calls Web's
+`build-pinned-core` target with its own data and contracts pins, so it uses Web's core pin without becoming a release.
+Automated Web tests keep reading the pins, so a package change cannot change a test without an intentional bump. The
+reason is unchanged — the dev stand previews main, while a release ships exactly what the project pins — so this needs
+no new decision record. Selecting consumer pipelines when a producer changes remains a later step of #424.

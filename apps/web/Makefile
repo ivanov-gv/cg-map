@@ -7,9 +7,9 @@ PINNED_CONTRACTS_ROOT = $(shell node tests/pinned-contracts.mjs)
 PINNED_CORE_ROOT = $(shell node tests/pinned-core.mjs)
 verify test test-built offline-check e2e e2e-built build-release: export MAP_DATA_ROOT = $(if $(PINNED_DATA_ROOT),$(PINNED_DATA_ROOT),$(error Cannot resolve @ivanov-gv/map-data; run make setup))
 verify test test-built offline-check e2e e2e-built build-release: export MAP_CONTRACTS_ROOT = $(if $(PINNED_CONTRACTS_ROOT),$(PINNED_CONTRACTS_ROOT),$(error Cannot resolve @ivanov-gv/map-contracts; run make setup))
-verify test test-built offline-check e2e e2e-built build-release: export MAP_CORE_ROOT = $(if $(PINNED_CORE_ROOT),$(PINNED_CORE_ROOT),$(error Cannot resolve @ivanov-gv/map-core; run make setup))
+verify test test-built offline-check e2e e2e-built build-release build-pinned-core: export MAP_CORE_ROOT = $(if $(PINNED_CORE_ROOT),$(PINNED_CORE_ROOT),$(error Cannot resolve @ivanov-gv/map-core; run make setup))
 
-.PHONY: verify lint build build-release test test-built offline-check e2e e2e-built dev dev-mock
+.PHONY: verify lint build build-pinned-core build-release test test-built offline-check e2e e2e-built dev dev-mock
 
 verify: lint build test-built offline-check
 
@@ -17,6 +17,10 @@ lint:
 	npm run lint
 
 build:
+	npm run build
+
+# A caller outside Web supplies data and contracts; this target supplies Web's own core pin without release enforcement.
+build-pinned-core:
 	npm run build
 
 # What a release ships: the exact core, data and contracts this app pins.

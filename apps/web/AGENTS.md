@@ -18,13 +18,16 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   lists out of the platform planner; prove a changed job count for the tagged phone tests with
   `E2E_WORKERS=2 npx playwright test --list --shard=i/N` for every shard, matching CI's worker count. Web runs only
   tagged phone tests, in PRs and nightly alike.
-- Data inputs belong to data/, not this component. Non-release builds (`build`, `dev`, `dev-mock` and the Pages build)
-  take core, data and contracts from this commit through tools/core-root.mjs, tools/data-root.mjs and
-  tools/contracts-root.mjs; no other file here may name a repository contracts path.
-- `make -C apps/web build-release` and `npm run release:prepare` take the exact `@ivanov-gv/map-core`,
-  `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins from package.json and refuse another root
-  ([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)). No production release has been published
-  yet.
+- Data inputs belong to data/, not this component. Plain non-release builds (`build`, `dev`, `dev-mock` and ci-publish
+  image/Pages builds) take core, data and contracts from this commit through tools/core-root.mjs, tools/data-root.mjs
+  and tools/contracts-root.mjs; no other file here may name a repository contracts path.
+- Verification targets (`verify`, `test`, `test-built`, `offline-check`, `e2e`, `e2e-built`) set all three roots from
+  the pins, so `make verify` builds the artifact CI uploads from the pinned packages. `make -C apps/web build-release`
+  and `npm run release:prepare` also take the exact `@ivanov-gv/map-core`, `@ivanov-gv/map-data` and
+  `@ivanov-gv/map-contracts` pins from package.json and refuse another root
+  ([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)). Platform's hosting test calls
+  `build-pinned-core`: the caller supplies data and contracts pins, and Web supplies its own core pin without release
+  enforcement. No production release has been published yet.
 - tests/ reads core through tests/pinned-core.mjs, data through tests/pinned-data.mjs and contracts through
   tests/pinned-contracts.mjs, using the exact pins in package.json. Bump a pin only in its own change after a release;
   never point tests at repository data/ or packages/contracts/. Test targets set all three roots, so a package change

@@ -43,7 +43,11 @@ test('a default build takes map-core from this commit', testContext => {
 
 test('automated tests and the release target build from the pinned core', () => {
   const makefile = fileSystem.readFileSync(new URL('../Makefile', import.meta.url), 'utf8');
-  assert.match(makefile, /^verify test test-built offline-check e2e e2e-built build-release: export MAP_CORE_ROOT = /m);
+  assert.match(
+    makefile,
+    /^verify test test-built offline-check e2e e2e-built build-release build-pinned-core: export MAP_CORE_ROOT = /m
+  );
+  assert.match(makefile, /^build-pinned-core:\n\tnpm run build$/m);
   assert.match(makefile, /^build-release:\n\tWEB_RELEASE=1 npm run build$/m);
   const appPackage = JSON.parse(fileSystem.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.match(appPackage.scripts.pretest, /MAP_CORE_ROOT="\$\(node tests\/pinned-core\.mjs\)"/);
