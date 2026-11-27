@@ -270,6 +270,16 @@ export function formatSummary({folders, everything}, reason, changedFiles = []) 
   ].join('\n');
 }
 
+// A PR base SHA recorded by GitHub goes stale after the branch merges main, so PR planning uses the merge base with
+// the current base branch instead. Fetching updates the remote ref; the full checkout already has the history.
+export function resolveBaseRef(baseRef, head = 'HEAD', options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const git =
+    options.git ?? ((args, runOptions = {}) => execFileSync('git', args, {cwd, encoding: 'utf8', ...runOptions}));
+  git(['fetch', '--no-tags', 'origin', baseRef], {stdio: ['ignore', 'pipe', 'pipe']});
+  return git(['merge-base', `origin/${baseRef}`, head], {stdio: ['ignore', 'pipe', 'pipe']}).trim();
+}
+
 function listChangedFiles(base, head) {
   // --no-renames lists both sides of a rename, so both folders are checked.
   const diff = execFileSync('git', ['diff', '--name-only', '--no-renames', `${base}...${head}`], {encoding: 'utf8'});
@@ -281,19 +291,29 @@ function main(args) {
     const index = args.indexOf(name);
     return index < 0 ? '' : (args[index + 1] ?? '');
   };
-  const base = option('--base');
+  const baseRef = option('--base-ref');
+  let base = option('--base');
   const head = option('--head') || 'HEAD';
   const isZeroBase = /^0+$/.test(base);
 
   let plan;
   let changedFiles = [];
   let reason = '';
+  if (baseRef && !args.includes('--all')) {
+    try {
+      base = resolveBaseRef(baseRef, head);
+    } catch (error) {
+      console.log(`::warning::Could not resolve base ref ${baseRef}, so everything runs: ${error.message}`);
+      base = '';
+      reason = 'base ref failed';
+    }
+  }
   if (args.includes('--all')) {
     plan = planChanges([]);
     reason = 'requested';
   } else if (!base || isZeroBase) {
     plan = planChanges([]);
-    reason = 'no base commit';
+    if (!reason) reason = 'no base commit';
   } else {
     try {
       changedFiles = listChangedFiles(base, head);
@@ -304,7 +324,7 @@ function main(args) {
       reason = 'diff failed';
     }
   }
-  if (changedFiles.includes(LOCKFILE)) {
+  if (changedFiles.includes(LOCKFILE) && base) {
     const lockPlan = planLockfileChanges(base, head);
     if (lockPlan.error) console.log(`::warning::${lockPlan.error}, so everything runs`);
     if (lockPlan.reason) reason = lockPlan.reason;

@@ -8,6 +8,13 @@ inputs:
     description: 'Base ref for diff comparison (default: origin/main).'
     required: false
     default: 'origin/main'
+  base_ref:
+    description: >-
+      Base branch name for a pull request. When set, the planner fetches origin/<base_ref>
+      and diffs against its merge base with HEAD, so merging the base branch into the PR
+      does not add the base branch's own changes to the plan.
+    required: false
+    default: ''
   run_all:
     description: 'true to run every folder regardless of diff.'
     required: false
@@ -89,10 +96,15 @@ runs:
       shell: bash
       env:
         PLAN_BASE: ${{ inputs.base }}
+        PLAN_BASE_REF: ${{ inputs.base_ref }}
         RUN_ALL: ${{ inputs.run_all }}
       run: |
         if [ "$RUN_ALL" = true ]; then
           node platform/tools/ci-plan.mjs --all
         else
-          node platform/tools/ci-plan.mjs --base "$PLAN_BASE"
+          if [ -n "$PLAN_BASE_REF" ]; then
+            node platform/tools/ci-plan.mjs --base-ref "$PLAN_BASE_REF"
+          else
+            node platform/tools/ci-plan.mjs --base "$PLAN_BASE"
+          fi
         fi
