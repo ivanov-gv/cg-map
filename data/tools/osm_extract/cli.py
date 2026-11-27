@@ -14,6 +14,7 @@ import osmium
 
 from . import ExtractionState
 from .borders import BorderEdgesLayer, MunicipalitiesLayer
+from .bridges import BridgesLayer
 from .buildings import (
     BuildingGeometryLayer, BuildingsLayer, EntrancesLayer, RoadNameCollector
 )
@@ -34,7 +35,8 @@ from .writing import read_collection, write_collection
 DEFAULT_BBOX = (19.15, 42.37, 19.34, 42.51)
 COVERAGE = (
     'Whole-city Podgorica detail; Montenegro major roads, attractions, '
-    'settlements, municipality borders, country outline, railways and water.'
+    'settlements, municipality borders, country outline, bridges, railways '
+    'and water.'
 )
 # One selectable name owns every layer that contributes to a source file.
 LAYER_GROUPS = {
@@ -43,6 +45,7 @@ LAYER_GROUPS = {
         EntrancesLayer
     ),
     'roads': (RoadsLayer, RoadNodesLayer, TurnRestrictionsLayer),
+    'bridges': (BridgesLayer,),
     'land': (CountryLayer, LandLayer),
     'borders': (BorderEdgesLayer, MunicipalitiesLayer),
     'settlements': (SettlementsLayer, SettlementAreasLayer),
@@ -55,8 +58,8 @@ LAYER_GROUPS = {
 # settlements then use those areas to assign their municipality. Water and
 # places finish last with the reviewed outline and building footprints.
 FINISH_ORDER = (
-    'buildings', 'roads', 'railways', 'land', 'borders', 'settlements',
-    'water', 'places', 'protected-areas'
+    'buildings', 'roads', 'bridges', 'railways', 'land', 'borders',
+    'settlements', 'water', 'places', 'protected-areas'
 )
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
@@ -254,7 +257,7 @@ def layer_checksum(root, filename):
 
 def updated_provenance(
     root, options, filenames, input_hash, is_partial, details=None,
-    railway_counts=None
+    railway_counts=None, bridge_counts=None
 ):
     """Update generated file inventory; full runs also record their input."""
     provenance = read_provenance(root)
@@ -271,6 +274,11 @@ def updated_provenance(
         }
     if railway_counts is not None:
         provenance['railway_counts'] = railway_counts
+    if bridge_counts is not None:
+        # Traced counts come from the reviewed seed, not from this OSM pass.
+        provenance['bridge_counts'] = {
+            **provenance.get('bridge_counts', {}), **bridge_counts
+        }
     if not is_partial:
         provenance.update({
             'export_date': options.source_date,
@@ -513,9 +521,12 @@ def run(args):
         railway_counts = (
             dict(state.railway_counts) if 'railways' in selected_groups else None
         )
+        bridge_counts = (
+            dict(state.bridge_counts) if 'bridges' in selected_groups else None
+        )
         updated_provenance(
             staging_root, staged_options, written_filenames, input_hash,
-            is_partial, details, railway_counts
+            is_partial, details, railway_counts, bridge_counts
         )
         publish_sources(
             staged_sources, sources_directory, published_filenames

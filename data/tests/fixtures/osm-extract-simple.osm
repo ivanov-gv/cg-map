@@ -1013,4 +1013,38 @@
     <tag k="railway" v="rail"/>
   </way>
 
+  <!-- Bridges: one mapped way area, one multipolygon relation and one outside the detail box. -->
+  <node id="9601" version="1" lat="42.455" lon="19.270"/>
+  <node id="9602" version="1" lat="42.455" lon="19.272"/>
+  <node id="9603" version="1" lat="42.456" lon="19.272"/>
+  <node id="9604" version="1" lat="42.456" lon="19.270"/>
+  <way id="9601" version="3">
+    <nd ref="9601"/><nd ref="9602"/><nd ref="9603"/><nd ref="9604"/><nd ref="9601"/>
+    <tag k="man_made" v="bridge"/>
+    <tag k="name" v="Test Way Bridge"/>
+    <tag k="name:en" v="Test Way Bridge EN"/>
+  </way>
+  <node id="9611" version="1" lat="42.457" lon="19.270"/>
+  <node id="9612" version="1" lat="42.457" lon="19.272"/>
+  <node id="9613" version="1" lat="42.458" lon="19.272"/>
+  <node id="9614" version="1" lat="42.458" lon="19.270"/>
+  <way id="9602" version="1">
+    <nd ref="9611"/><nd ref="9612"/><nd ref="9613"/><nd ref="9614"/><nd ref="9611"/>
+  </way>
+  <relation id="9601" version="4">
+    <member type="way" ref="9602" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="man_made" v="bridge"/>
+    <tag k="name" v="Test Relation Bridge"/>
+  </relation>
+  <node id="9621" version="1" lat="42.600" lon="19.280"/>
+  <node id="9622" version="1" lat="42.600" lon="19.282"/>
+  <node id="9623" version="1" lat="42.601" lon="19.282"/>
+  <node id="9624" version="1" lat="42.601" lon="19.280"/>
+  <way id="9603" version="2">
+    <nd ref="9621"/><nd ref="9622"/><nd ref="9623"/><nd ref="9624"/><nd ref="9621"/>
+    <tag k="man_made" v="bridge"/>
+    <tag k="name" v="Outside Bridge"/>
+  </way>
+
 </osm>

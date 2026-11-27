@@ -63,6 +63,13 @@ export const TILE_LAYERS = [
     keep: keepRoad
   },
   {
+    name: 'bridges',
+    sourceFile: 'bridges.geojson',
+    minZoom: 12,
+    // One polygon per crossing, mapped from OSM or traced once; method lets a style tell the two apart.
+    fields: ['kind', 'name', 'method']
+  },
+  {
     name: 'railways',
     sourceFile: 'railways.geojson',
     minZoom: 12,
