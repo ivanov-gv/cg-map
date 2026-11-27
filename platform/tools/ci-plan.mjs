@@ -66,6 +66,8 @@ const HEAD_DATA_CONSUMERS = ['tests'];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
 const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
 const LOCKFILE = 'package-lock.json';
+// Platform's pin and workflow tests read the lockfile directly, so every lockfile change selects platform.
+const LOCKFILE_READERS = ['platform'];
 // Returns config paths for known projects that have one under root. A missing config leaves that project on the root
 // file and outside the shared-rule consumers; tests use scratch fixtures, not the current checkout's config set.
 export function discoveredLintConfigs(root = process.cwd()) {
@@ -164,8 +166,8 @@ function everythingPlan(reason, error = '') {
   return {folders: FOLDERS, everything: true, reason, error};
 }
 
-// Compares the two committed lockfiles and returns the projects whose `packages` entries differ. Shared or unknown
-// entries, and unreadable or unparsable files, select everything because they can affect any project.
+// Compares the two committed lockfiles and returns the projects whose `packages` entries differ, plus the projects
+// whose tests read the lockfile. Shared or unknown entries, and unreadable or unparsable files, select everything.
 function planLockfileChanges(base, head) {
   const packagesByRevision = {};
   for (const [name, revision] of [
@@ -188,7 +190,7 @@ function planLockfileChanges(base, head) {
   }
 
   const entries = new Set([...Object.keys(packagesByRevision.base), ...Object.keys(packagesByRevision.head)]);
-  const folders = new Set();
+  const folders = new Set(LOCKFILE_READERS);
   for (const entry of entries) {
     const isUnchanged = JSON.stringify(packagesByRevision.base[entry]) === JSON.stringify(packagesByRevision.head[entry]);
     if (isUnchanged) continue;

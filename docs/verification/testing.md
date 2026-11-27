@@ -96,13 +96,14 @@ it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs ev
 | `packages/contracts`                                        | `contracts`, `data`, `tests`, `platform`                                                                                                                                    |
 | `.github`, the planner                                      | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md)                                                                                 |
 | Root `Makefile`                                             | Only the folders whose CI calls it: `docs`, `workflows`, `platform`, `contracts`, `data`, `transit-relay`, `tests`, `map-core`, `apps-web`, `apps-editor`, `apps-core-demo` |
-| `package-lock.json`                                         | Only the projects whose workspace entries changed; hoisted, unmapped or unreadable entries run everything                                                                   |
+| `package-lock.json`                                         | The projects whose workspace entries changed, plus `platform` for its pin checks; hoisted, unmapped or unreadable entries run everything                                    |
 | Other root files such as `package.json`, or unknown paths   | Everything                                                                                                                                                                  |
 
 The root Makefile rule follows its CI callers: `make verify PKG=<path>` in the folder workflows and `make check-docs` in
 ci-docs, plus the `workflows` folder for its lint-workflows and act targets. Browser jobs, the backend and the browser
 image use their own project Makefiles; the planner emits no browser matrix. It reads `package-lock.json` at base and
-head: changed workspace entries select their own projects, while shared or unreadable entries run everything.
+head: changed workspace entries select their own projects, plus `platform` because its pin checks read the lockfile;
+shared or unreadable entries run everything.
 
 Check a branch with `make ci-plan BASE=origin/main`.
 

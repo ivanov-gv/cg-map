@@ -146,9 +146,9 @@ location from the caller.
 
 App and platform hosting tests read only that pinned package, so a data-only change selects no app or platform pipeline.
 Each application bumps its own pin in its own change, as map-core upgrades do; a pin bump changes that workspace's
-entries in `package-lock.json` and selects that app's pipeline, because the planner compares the lockfile at base and
-head. A hoisted or unreadable lockfile change still selects every pipeline. The three-app command is only an optional
-example:
+entries in `package-lock.json` and selects that app's pipeline plus platform's pin checks, because the planner compares
+the lockfile at base and head. A hoisted or unreadable lockfile change still selects every pipeline. The three-app
+command is only an optional example:
 
 ```sh
 npm install --workspace apps/web --workspace apps/editor --workspace apps/core-demo \
@@ -206,7 +206,7 @@ browser jobs in one PR.
 
 Web and editor pin an exact version for `make verify`, automated tests and release builds; their plain dev builds, CI
 artifacts and dev Pages site take the core of their own commit. Each app upgrades in its own change, which changes its
-workspace entries in `package-lock.json` and runs that app's pipeline:
+workspace entries in `package-lock.json` and runs that app's pipeline plus platform's pin checks:
 
 ```sh
 npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0

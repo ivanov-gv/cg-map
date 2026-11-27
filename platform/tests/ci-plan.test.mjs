@@ -218,7 +218,7 @@ test('only the root Makefile narrows the plan; other root files still select eve
   }
 });
 
-test('a lockfile pin bump selects only the workspace whose entries changed', context => {
+test('a lockfile pin bump selects its workspace and the platform pin checks', context => {
   const editorEntry = version => ({
     version,
     resolved: `https://npm.pkg.github.com/download/@ivanov-gv/map-core/${version}/digest`,
@@ -231,7 +231,7 @@ test('a lockfile pin bump selects only the workspace whose entries changed', con
     });
   const summary = runPlanner(lockfileFixture(context, lockForVersion('0.2.0'), lockForVersion('0.3.0')));
   assert.match(summary, /^Selected a subset of pipelines\.$/m, summary);
-  assert.match(summary, /^- Folders: apps-editor$/m, summary);
+  assert.match(summary, /^- Folders: platform, apps-editor$/m, summary);
 });
 
 test('a hoisted lockfile entry selects everything with a shared reason', context => {
