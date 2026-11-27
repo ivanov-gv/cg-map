@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pinned editor source bundle",
-  "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle; version 4 adds the editable bridge outlines. Versions are frozen once released.",
+  "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle; version 4 adds the editable bridge outlines and railways. Versions are frozen once released.",
   "type": "object",
   "required": ["version", "layers"],
   "additionalProperties": false,
@@ -83,8 +83,8 @@
       "properties": {
         "version": {"const": 4},
         "layers": {
-          "minItems": 23,
-          "maxItems": 23,
+          "minItems": 24,
+          "maxItems": 24,
           "items": {
             "properties": {
               "filename": {
@@ -101,6 +101,7 @@
                   "municipalities.geojson",
                   "places.geojson",
                   "protected-areas.geojson",
+                  "railways.geojson",
                   "ridges.geojson",
                   "road-nodes.geojson",
                   "roads.geojson",

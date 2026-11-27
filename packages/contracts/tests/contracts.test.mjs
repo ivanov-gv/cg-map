@@ -68,7 +68,7 @@ test('editor bundle versions freeze each version and add to the one before', () 
         'turn-restrictions.json'
       ]
     ],
-    [4, ['bridges.geojson']]
+    [4, ['bridges.geojson', 'railways.geojson']]
   ]);
   let previousFiles = [];
   for (const version of [1, 2, 3, 4]) {
@@ -93,6 +93,23 @@ test('bridges are an editable polygon layer with only reviewed property rules', 
       method: {enum: ['osm', 'traced'], addOnly: true},
       osmTag: {enum: ['man_made=bridge'], addOnly: true},
       sourceRoadIds: {type: 'list', maxLength: 64, pattern: '^(way|relation)/[1-9][0-9]*$', addOnly: true}
+    }
+  });
+});
+
+test('railways are editable as stored, with only the reviewed property rules', () => {
+  assert.deepEqual(readJSON('editor-layers.json').layers['railways.geojson'], {
+    operations: ['add', 'modify', 'delete'],
+    geometries: ['Point', 'LineString', 'Polygon'],
+    properties: {
+      kind: {requiredOnAdd: true, enum: ['disused_rail', 'halt', 'platform', 'rail', 'station']},
+      name: {maxLength: 128},
+      osmTag: {
+        enum: ['disused:railway=rail', 'railway=halt', 'railway=platform', 'railway=rail', 'railway=station'],
+        addOnly: true
+      },
+      gauge: {maxLength: 128},
+      ref: {maxLength: 128}
     }
   });
 });
