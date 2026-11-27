@@ -93,6 +93,23 @@ test('a moved ridge recolours both slopes, and its ends stay on the outline of i
   for (const edit of movedMiddle) assert.ok(hasCorner(edit, [2, 6]));
 });
 
+test('a bundle without slopes lets a ridge move without recolouring or sliding its ends', () => {
+  const ridge = coordinates => feature({kind: 'ridge'}, {type: 'LineString', coordinates});
+  const before = ridge(points([0, 5], [2, 5], [4, 5]));
+  const context = {
+    ...contextWith({}),
+    hasFile: filename => filename !== 'slopes.geojson',
+    session: {workingFeature: () => before}
+  };
+  const behavior = reliefBehaviors['ridges.geojson'];
+  const dragged = {type: 'LineString', coordinates: points([1, 6], [2, 6], [4, 6])};
+  const limited = behavior.limitedGeometry(dragged, {key: '0', previousGeometry: before.geometry}, context);
+  assert.deepEqual(limited.coordinates, dragged.coordinates, 'no slope outline to slide an end along');
+  const edit = {feature: {...before, geometry: limited}, before};
+  assert.equal(behavior.problem(edit, context), null);
+  assert.deepEqual(behavior.companionEdits(edit, context), []);
+});
+
 test('a ridge end cannot be removed, but a point between its ends can', () => {
   const slope = (...steps) => feature({kind: 'slope'}, {type: 'Polygon', coordinates: [ringOf(...steps)]});
   const ridgeAt = coordinates => feature({kind: 'ridge'}, {type: 'LineString', coordinates});

@@ -31,8 +31,8 @@ Projects depend on each other only through these concrete contracts:
 | Local map-core, unreleased                     | packages/map-core  | apps/core-demo dev, CI artifact and dev Pages builds; apps/web and apps/editor local builds and ci-publish dev-image/Pages builds |
 | Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                                |
 | Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                                |
-| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                          |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration                                            |
+| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app and map-core tests, backend generate-check and release generation, platform hosting tests, pinned                             |
+| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration, backend dev generation                    |
 | Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                                 |
 | Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                         |
 | Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                            |
@@ -41,7 +41,7 @@ Projects depend on each other only through these concrete contracts:
 | Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                                |
 | Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                                    |
 | Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                                             |
-| Shared ESLint rules, platform/eslint-rules.mjs | platform           | packages/map-core, data, packages/contracts, services/transit-relay, platform, tests, apps/editor, apps/core-demo; Web: root      |
+| Shared ESLint rules, platform/eslint-rules.mjs | platform           | packages/map-core, data, packages/contracts, services/transit-relay, platform, tests, apps/web, apps/editor, apps/core-demo       |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -55,11 +55,10 @@ Rules:
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules
   ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)) are a development dependency recorded above;
-  the planner selects the projects whose configs exist in the checkout. In this transition the configs are the six
-  non-app projects, apps/editor and apps/core-demo; Web still uses the root file, and its config will join the consumers
-  without a planner change. A root `eslint.config.mjs` change keeps the whole-plan selection while the root still serves
-  apps/web: lint configuration can change what its checks find. An app config selects that app's folder, and the folder
-  calls the app's whole workflow, including its browser shards; the planner has no lint-only folder.
+  the planner selects the projects whose configs exist in the checkout: the six non-app projects and all three apps. A
+  project's config selects that project's verify; an app config also selects the app's folder, whose workflow runs its
+  browser shards. The planner has no lint-only folder. The root `eslint.config.mjs` is retired, so a change to that path
+  selects only platform's hook and layout checks.
 - Both map apps own their browser suites and shard counts; the planner only selects folders. See
   [web instructions](../../apps/web/AGENTS.md), [editor instructions](../../apps/editor/AGENTS.md) and
   [workflow testing](../../.github/TESTING.md#on-github).
@@ -70,12 +69,10 @@ Rules:
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
   it publishes by setting the data and contracts versions; `platform/tools/phone-tags.mjs`, which platform's tag check
   and both apps' own unit tests read at HEAD while no runtime app imports it; and development tooling: the six non-app
-  configs, apps/editor and apps/core-demo read `platform/eslint-rules.mjs` at HEAD through their own configs. Apps/web
-  still reads the unchanged root `eslint.config.mjs`, which imports ESLint's own presets directly and does not consume
-  the shared module. During this bounded transition its app rule values may duplicate future shared rules; the Web
-  migration and later root cleanup remove that duplication. It is repository tooling like the ESLint binary and its
-  plugins, not runtime data; a pinned package would need a release for each rule change. Owner approval for this narrow
-  exception is requested in the #458 PR ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).
+  configs and all three apps read `platform/eslint-rules.mjs` at HEAD through their own configs. It is repository
+  tooling like the ESLint binary and its plugins, not runtime data; a pinned package would need a release for each rule
+  change. Owner approval for this narrow exception is requested in the #458 PR
+  ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).
 
 ### Core modes
 
@@ -112,7 +109,7 @@ or bundle sources take their contract location from the caller and never resolve
 
 ### Contract modes
 
-Shared formats reach consumers in three operative modes:
+Shared formats reach app and integration consumers in three operative modes; backend generation has its own split below:
 
 1. App tests (unit, built, browser and offline-check), every app's `build-release` and platform's hosting-test web build
    read the exact `@ivanov-gv/map-contracts` release pinned in their owning manifest. App test targets set
@@ -120,14 +117,19 @@ Shared formats reach consumers in three operative modes:
    change selects no app pipeline.
 2. Plain dev and CI artifact builds on main, including ci-publish's `pages` job and the content cd-dev-pages deploys,
    read repository `packages/contracts` at HEAD. Each of the three apps has one build resolver that defaults to that
-   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. Every app's
-   `build-release` pins contracts too, as a future app production release will. No production app release exists yet.
+   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. Backend dev
+   generation has a like resolver in `tools/contracts-root.sh`. Every app's `build-release` pins contracts too, as a
+   future app production release will. No production app release exists yet.
 3. Cross-project integration tests read repository contracts at HEAD through one helper, which honours
    `MAP_CONTRACTS_ROOT`. Before promoting a release, `tests/` installs the exact package and sets
    `MAP_CONTRACTS_VERSION` so the whole suite tests the candidate.
 
-`map-core` and `services/backend` read contracts only from tests or generation, so they stay pinned. Data validation
-reads HEAD contracts through its own producer path. See
+`map-core` reads contracts only from tests, so it stays pinned. services/backend owns a fourth mode: dev generation
+reads HEAD through `tools/contracts-root.sh` and honours `MAP_CONTRACTS_ROOT`, while `generate-check`,
+`generate-release` and `build-release` read the exact pin and refuse another root. Regular Go builds and tests use
+committed bindings and a checked-in fixture, so they need no installed package. CI's backend check does not call
+`generate-check`, so it does not compare those bindings with the pin; enforcing that comparison in CI would require
+installing the pin there. Data validation reads HEAD contracts through its own producer path. See
 [releasing map contracts](../runbooks/release.md#releasing-map-contracts).
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then

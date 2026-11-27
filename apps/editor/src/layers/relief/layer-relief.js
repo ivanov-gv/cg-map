@@ -21,6 +21,8 @@ const removedEndMessage = 'A ridge end cannot be removed. Move it along the outl
 
 // Lines need a big screen; their fields do not.
 const isDesk = context => !context.isPhone();
+// A version 4 bundle leaves derived slopes to the style, so a ridge cannot recolour them there.
+const hasSlopes = context => !context.hasFile || context.hasFile(slopesFile);
 
 const otherContourLines = (key, context) =>
   context
@@ -132,6 +134,7 @@ function renderSummitExtras(container, {feature, context}) {
 
 // The ends of a ridge lie on the outline of its hill and slide along it. Where its sides cannot be told they stay.
 function ridgeWithEndsOnOutline(geometry, {key, previousGeometry}, context) {
+  if (!hasSlopes(context)) return geometry;
   const before = context.session.workingFeature(ridgesFile, key);
   const sides = sidesOfRidge(before.geometry.coordinates, context.entriesOf(slopesFile), ridgeToleranceMetres);
   const previous = previousGeometry.coordinates;
@@ -147,6 +150,7 @@ function ridgeWithEndsOnOutline(geometry, {key, previousGeometry}, context) {
 
 // Light and shade change on both sides at once.
 function slopeEdits({feature, before}, context) {
+  if (!hasSlopes(context)) return [];
   if (hasMovedEnds(before.geometry.coordinates, feature.geometry.coordinates)) {
     const sides = sidesOfRidge(before.geometry.coordinates, context.entriesOf(slopesFile), ridgeToleranceMetres);
     return sides ? slopesWithSlidEnds(feature.geometry.coordinates, sides) : [];
@@ -160,6 +164,7 @@ function ridgeProblem(edit, context) {
   const {feature, before, origins} = edit;
   if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
   if (isEndRemoved(before.geometry.coordinates, feature.geometry.coordinates, origins)) return removedEndMessage;
+  if (!hasSlopes(context)) return null;
   const slopes = slopeEdits(edit, context);
   // One is sunlit and one is shaded.
   if (slopes.length < slopesOfRidge) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';
@@ -174,7 +179,10 @@ function renderRidgeExtras(container, {feature, context}) {
   const entry = summit && context.findEntity(summitsFile, summit);
   const height = entry?.feature.properties.ele;
   if (summitName) container.append(createElementWithText('p', `Passes over ${summitName}${height ? ` · ${height} m` : ''}`));
-  const note = createElementWithText('p', 'The ridge splits light from shade. Moving it recolours both sides at once, and its ends slide along the outline of the hill.');
+  const explanation = context.hasFile && !context.hasFile(slopesFile)
+    ? 'This bundle has no separate slopes, so moving a ridge does not recolour them and its ends stay where they are.'
+    : 'The ridge splits light from shade. Moving it recolours both sides at once, and its ends slide along the outline of the hill.';
+  const note = createElementWithText('p', explanation);
   note.className = 'hint';
   container.append(note);
 }

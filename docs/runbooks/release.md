@@ -51,6 +51,15 @@ ci-publish image/Pages builds use this commit's `packages/map-core`, while `make
 workspace `0.0.0-dev` core because it is core's dev environment, so its pin and its HEAD core are the same package until
 a core release is published ([ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md)).
 
+### Backend contracts
+
+services/backend consumes no map-core or map-data package. Its `make -C services/backend generate` takes the shared
+proto from this commit and honours `MAP_CONTRACTS_ROOT` through its own resolver. `generate-check`, `generate-release`
+and `build-release` take the exact `@ivanov-gv/map-contracts` pin installed by `make setup` and refuse another root;
+regular Go builds compile the committed bindings and need no installed package. CI's `make -C services/backend check`
+does not call `generate-check`, so it does not compare those bindings with the pin; run `generate-check` or
+`build-release` after a contracts pin bump when that comparison is wanted.
+
 Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
 installs that package and points the shared integration helper at it. See
 [Releasing map-contracts](#releasing-map-contracts).

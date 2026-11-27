@@ -628,8 +628,10 @@ build. GitHub Actions validates dist/web on a PR and publishes it from main. Do 
 ### Focused browser checks
 
 Follow the [web testing workflow and measured timings](AGENTS.md#testing). Start with `make verify PKG=apps/web` for
-frontend lint, boundaries, build, Node tests, and offline manifests; it does not run Playwright. During iteration,
-choose browser cases that exercise the changed behavior instead of running the entire suite after every edit.
+frontend lint, boundaries, build, Node tests, and offline manifests; it does not run Playwright. Lint uses this app's
+own `eslint.config.mjs` with the shared rules, so its source, tools, tests and config are checked from this folder.
+During iteration, choose browser cases that exercise the changed behavior instead of running the entire suite after
+every edit.
 
 Run these commands from apps/web. The local Playwright configuration selects a per-worktree port automatically; E2E_PORT
 overrides it when needed:

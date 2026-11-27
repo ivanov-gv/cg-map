@@ -1,6 +1,7 @@
-// A city of a few objects per layer, small enough to read, with everything the current bundle version holds. Layers that
-// the pinned reviewed data does not have yet are tested on it. The rules beside it are this app's own copy for tests: the
-// pinned contracts package gets them with its next release, and tests/ checks the real files at HEAD until then.
+// A city of a few objects per layer, small enough to read, with everything the current bundle version holds. A caller
+// can also ask for version 4, which has bridge outlines and railways instead of derived slopes. Layers the pinned
+// reviewed bundle does not emit yet are tested on it. The rules beside it are this app's own copy for tests: they match
+// the pinned contracts for new files, while ridges stay view-only here until #490.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {bundleFilesByVersion, currentBundleVersion} from '../../src/source-data/source-bundle.js';
@@ -94,6 +95,34 @@ function cityFeatures() {
       road(30, 'Main street', line([-6, 0], [0, 0], [6, 0]), endsAt(300, 301)),
       road(31, 'Side street', line([6, 0], [6, 5]), endsAt(301, 302)),
       road(32, 'Far street', line([-6, -6], [6, -6]), endsAt(303, 304))
+    ],
+    'bridges.geojson': [
+      feature(
+        'way/33',
+        {
+          kind: 'bridge',
+          name: 'Main street bridge',
+          method: 'osm',
+          osmTag: 'man_made=bridge',
+          sourceRoadIds: ['way/30']
+        },
+        polygon(square(-1, -0.6, 2))
+      )
+    ],
+    'railways.geojson': [
+      feature(
+        'way/34',
+        {kind: 'rail', name: 'Rail to station', osmTag: 'railway=rail', gauge: '1435 mm'},
+        line([-8, 3], [8, 3])
+      ),
+      feature('way/35', {kind: 'disused_rail', osmTag: 'disused:railway=rail'}, line([-8, 4], [-2, 4])),
+      feature(
+        'way/36',
+        {kind: 'platform', name: 'Platform 1', osmTag: 'railway=platform'},
+        polygon(square(2, 3.2, 3))
+      ),
+      feature('node/37', {kind: 'halt', name: 'Town halt', osmTag: 'railway=halt'}, point(-4, 3)),
+      feature('node/38', {kind: 'station', name: 'Town station', osmTag: 'railway=station'}, point(4, 3))
     ],
     'road-nodes.geojson': [feature('node/40', {kind: 'crossing'}, point(0, 0))],
     'land.geojson': [
@@ -275,9 +304,9 @@ const featureCountOf = (filename, features) =>
   features[filename].length;
 
 // Every source file of the city as text, with the manifest the editor verifies it by.
-export function fixtureBundle() {
+export function fixtureBundle(version = currentBundleVersion) {
   const features = cityFeatures();
-  const filenames = bundleFilesByVersion[currentBundleVersion];
+  const filenames = bundleFilesByVersion[version];
   const files = new Map(filenames.map(filename => [filename, sourceText(filename, features)]));
   const layers = filenames.map(filename => ({
     filename,
@@ -285,12 +314,12 @@ export function fixtureBundle() {
     bytes: Buffer.byteLength(files.get(filename)),
     featureCount: featureCountOf(filename, features)
   }));
-  return {files, manifest: {version: currentBundleVersion, layers}};
+  return {files, manifest: {version, layers}};
 }
 
-// Opens the editor on the fixture city and waits for Browse.
-export async function openFixtureCity(page) {
-  const {files, manifest} = fixtureBundle();
+// Opens the editor on the fixture city and waits for Browse. Version 4 is for the files the producer has not emitted yet.
+export async function openFixtureCity(page, version = currentBundleVersion) {
+  const {files, manifest} = fixtureBundle(version);
   await page.route('**/sources/*', route => {
     const filename = new URL(route.request().url()).pathname.split('/').pop();
     const body = filename === 'manifest.json' ? JSON.stringify(manifest) : files.get(filename);

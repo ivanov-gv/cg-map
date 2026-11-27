@@ -46,3 +46,39 @@ existing HEAD default outside tests and releases. Core-demo pins workspace `0.0.
 environment, so the pin and the repository path name the same core until a release is published — the explicit pin path
 still makes the release declaration checkable. Automated tests keep reading pins, and the reason is the same as for
 Editor and Web, so this needs no new decision record.
+
+## Outcome: Platform has no package split of its own (2026-11-27, #424)
+
+Platform's only build that resolves other projects is `make -C platform build-web`, which its CI verify runs for hosting
+tests. It sets `MAP_DATA_ROOT` and `MAP_CONTRACTS_ROOT` from platform's own `tools/pinned-data-root.mjs` and
+`tools/pinned-contracts-root.mjs`, then calls Web's `build-pinned-core` target so Web supplies its own core pin. The dev
+Pages site is assembled by ci-publish from each app's plain `build` target; `platform/pages/Dockerfile` only copies that
+site and `tools/serve.py` only serves an existing artifact. Platform has no release build of its own, and its manifest
+pins `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts`, so tests resolve installed packages outside repository
+sources. No code change is needed here; selecting consumer pipelines when a producer changes remains a separate step of
+issue 424.
+
+## Outcome: Data has no consumer package to split (2026-11-27, #424)
+
+data reads only shared contracts, through the producer-validation exception in
+[ADR 0021](0021-shared-contracts-as-a-versioned-package.md): `make -C data check`, the importer targets and data's tests
+use this commit's `packages/contracts`, while packaged tools take the contracts directory from their caller. It resolves
+no map-core, map-data or built web artifact in dev, CI, tests or release; `cd-map-data` promotes the package built from
+that same commit without rebuilding. There is no consumer pin for a data release or test to substitute, so data already
+follows the rule without a code change.
+
+## Outcome: Backend splits contracts generation the same way (2026-11-27, #424)
+
+services/backend uses no map-core or map-data package. Its dev `make generate` reads this commit's contracts through its
+own `tools/contracts-root.sh` and honours `MAP_CONTRACTS_ROOT`; `generate-check`, `generate-release` and `build-release`
+resolve the exact `@ivanov-gv/map-contracts` pin and refuse another root. Regular Go builds and tests compile committed
+bindings and use a fixture copy that `tests/` verifies against its pin, so they need no installed package. CI's backend
+check does not call `generate-check`, so automatic pin enforcement would require installing the pin there; that is
+outside this change. The dev stand and release reasons are unchanged, so this needs no new decision record.
+
+## Outcome: Transit relay has no package to split (2026-11-27, #424)
+
+services/transit-relay's `relay.mjs` and `worker.mjs` import only each other; its tests use local fixtures, its Makefile
+only lints and runs those tests, and the hosted deployment is a recorded manual copy of `relay.mjs`. It resolves no
+map-core, map-data or map-contracts package, path, embed or generated code in dev, CI or tests, so it already follows
+the rule without a code change.

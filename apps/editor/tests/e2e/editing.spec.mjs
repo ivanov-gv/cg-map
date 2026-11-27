@@ -1,5 +1,7 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
+import {buildingAt} from '../../src/layers/places/layer-places.js';
+import {buildingId} from '../../src/layers/shared/object-names.js';
 import {
   browseStatus,
   deleteObject,
@@ -75,6 +77,26 @@ test.describe('source editing', () => {
   const fetchFeatures = async (page, filename) => {
     const response = await page.request.get(new URL(`sources/${filename}`, page.url()).href);
     return (await response.json()).features;
+  };
+
+  // An object with source identity is exported by that identity, not by its position in the snapshot.
+  const expectedReferenceOf = (feature, index) => {
+    const {entityId, entityPart} = feature.properties;
+    if (entityId === undefined) return {featureIndex: index};
+    return entityPart === undefined ? {entityId} : {entityId, entityPart};
+  };
+
+  // A moved place belongs to the building under its new point, or stands alone.
+  const expectedPropertiesAfterMove = async (page, feature, coordinate) => {
+    const buildings = await fetchFeatures(page, buildingsFile);
+    const entries = buildings.map((building, index) => ({key: String(index), filename: buildingsFile, feature: building}));
+    const building = buildingAt(coordinate, {entriesOf: () => entries});
+    const properties = {...feature.properties};
+    delete properties.buildingEntityId;
+    delete properties.standalone;
+    if (building) properties.buildingEntityId = buildingId(building);
+    else properties.standalone = true;
+    return properties;
   };
 
   const chooseMode = async (page, filename) => {
@@ -203,7 +225,7 @@ test.describe('source editing', () => {
     expect(Object.keys(changeset.bases)).toEqual([placesFile]);
     const [operation] = changeset.operations;
     expect(operation.operation).toBe('modify');
-    expect(operation.reference).toEqual({featureIndex: index});
+    expect(operation.reference).toEqual(expectedReferenceOf(feature, index));
     expect(operation.before).toEqual(feature);
     expect(operation.after.properties).toEqual({...feature.properties, name: editedName, visibilityLevel: 2});
     expect(operation.after.geometry).toEqual(feature.geometry);
@@ -321,15 +343,37 @@ test.describe('source editing', () => {
         window.statusFocusCount += 1;
         window.statusAtFocus = status.textContent;
       });
+      // Hold the rendered-state notification while the real source worker loads.
+      const {map} = window.editorDebug;
+      const originalFire = map.fire;
+      map.fire = function (event, ...argumentsAfterEvent) {
+        const type = typeof event === 'string' ? event : event.type;
+        if (type === 'idle') return this;
+        return originalFire.call(this, event, ...argumentsAfterEvent);
+      };
+      window.releaseModeIdle = () => {
+        map.fire = originalFire;
+        map.fire('idle');
+      };
     });
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#status')).toBeFocused();
     expect(await page.evaluate(() => window.statusAtFocus)).toBe('Loading Places & points…');
+    await expect.poll(() => page.evaluate(() => window.editorDebug.map.isSourceLoaded('editor-source'))).toBe(true);
+    await expect(page.locator('#status')).toContainText('objects');
     await expect(page.locator('#status')).not.toHaveClass(/attention/);
     await expect(page.locator('#status')).toBeFocused();
     expect(await page.evaluate(() => window.statusFocusCount)).toBe(1);
     await expect(page.locator('#status')).toHaveCSS('clip-path', 'none');
+    await openPanel(page, 'Tools');
+    await page.locator('#open-objects').click();
+    await expect(page.locator('#objects-status')).toHaveText('Loading objects…');
+    await page.evaluate(() => {
+      window.releaseModeIdle();
+      delete window.releaseModeIdle;
+    });
+    await expect(page.locator('#objects-status')).toHaveText(/objects$/);
     const {changeset} = await exportChangeset(page, testInfo);
     expect(changeset.operations[0].after.properties.name).toBe(editedName);
   });
@@ -1168,7 +1212,7 @@ test.describe('source editing', () => {
     expect(renderedAtOldPosition).toBe(0);
     const {changeset} = await exportChangeset(page, testInfo);
     const {after} = changeset.operations[0];
-    expect(after.properties).toEqual(feature.properties);
+    expect(after.properties).toEqual(await expectedPropertiesAfterMove(page, feature, after.geometry.coordinates));
     expectCoordinateNear(after.geometry.coordinates, expected);
   });
 
@@ -1365,15 +1409,16 @@ test.describe('source editing', () => {
     await drawLine(page, center);
     await applyAndWait(page);
     await expect(page.locator('#toast')).toContainText('Applied');
-    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    // A newly drawn footway has no pathClass: map-core draws it with paths, not footways (those need pathClass main).
+    await expect.poll(() => renderedCount('edit-preview-paths', center)).toBeGreaterThan(0);
 
     await chooseMode(page, placesFile);
-    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    await expect.poll(() => renderedCount('edit-preview-paths', center)).toBeGreaterThan(0);
     await expect.poll(() => renderedCount('editor-applied-line', center)).toBeGreaterThan(0);
     await openPanel(page, 'Layers');
     await page.locator('#browse').click();
     await expect(page.locator('#status')).toHaveText(browseStatus);
-    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    await expect.poll(() => renderedCount('edit-preview-paths', center)).toBeGreaterThan(0);
     // The source holds only what the tiles around the view need, so look where the place is.
     await centerMapOn(page, feature.geometry.coordinates);
     const shownPlaceName = () =>
@@ -1518,18 +1563,27 @@ test.describe('source editing', () => {
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
 
-  // The rules of an older reviewed bundle still lock some files.
-  test('an object the rules of an older bundle lock explains itself and offers no editing', async ({page}) => {
+  // The pinned rules now let these dated stops be edited, with their source identity kept on export.
+  test('a stop from the pinned rules is editable and exports its change', async ({page}, testInfo) => {
     await openEditor(page);
     await chooseMode(page, 'transport-stops.geojson');
-    await expect(page.locator('#status')).toContainText('read-only');
-    await expect(drawChoice(page)).toHaveCount(0);
+    await expect(page.locator('#status')).toContainText('editable');
+    await expect(drawChoice(page)).toHaveCount(1);
     const stops = await fetchFeatures(page, 'transport-stops.geojson');
-    await centerMapOn(page, stops[0].geometry.coordinates);
-    await expect(page.locator('#status')).toContainText('objects');
-    await tapMapAt(page, stops[0].geometry.coordinates);
-    await expect(page.locator('#lock-reason')).toContainText('transit import');
-    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    const index = stops.findIndex((_stop, candidateIndex) => isIsolatedAt(stops, candidateIndex));
+    expect(index).toBeGreaterThanOrEqual(0);
+    const stop = stops[index];
+    await centerMapOn(page, stop.geometry.coordinates);
+    await tapMapAt(page, stop.geometry.coordinates);
+    await expect(page.locator('#selection-title')).toHaveText(stop.properties.name);
+    await expect(page.locator('#lock-reason')).toBeHidden();
+    await expect(page.locator('#editor')).toBeVisible();
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    const {changeset} = await exportChangeset(page, testInfo);
+    expect(changeset.operations[0].reference).toEqual(expectedReferenceOf(stop, index));
+    expect(changeset.operations[0].after.properties).toEqual({...stop.properties, name: editedName});
   });
 
   test('Escape in the export dialog closes only the dialog, not the Changes panel', async ({page}) => {
