@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {waitForRepaint} from './city-steps.mjs';
 import {browseStatus, drawChoice, layerButton, layerNameOf, openObjects, openTools} from './workspace.mjs';
 
 // Asserts source inspection against this app's own built artifact. Editing has its own spec.
@@ -262,9 +263,10 @@ async function setView(page, center, zoom) {
   await expect.poll(() => page.evaluate(() => window.editorDebug.map.loaded())).toBe(true);
 }
 
-async function toggleGuides(page) {
+async function toggleGuides(page, {waitForRender = true} = {}) {
   await openTools(page);
   await page.locator('#edit-guides').click();
+  if (waitForRender) await waitForRepaint(page);
   await page.getByRole('button', {name: 'Tools', exact: true}).click();
   await expect(page.locator('#status')).toContainText('objects');
 }
@@ -493,7 +495,26 @@ test('Objects list follows guide visibility for below-threshold POIs', {tag: '@p
   await toggleGuides(page);
   await openObjects(page);
   await expect(page.locator('#objects-list')).not.toContainText(feature.properties.name);
-  await toggleGuides(page);
+  await page.evaluate(() => {
+    // Hold the rendered-state notification while guide visibility changes.
+    const {map} = window.editorDebug;
+    const originalFire = map.fire;
+    map.fire = function (event, ...argumentsAfterEvent) {
+      const type = typeof event === 'string' ? event : event.type;
+      if (type === 'idle') return this;
+      return originalFire.call(this, event, ...argumentsAfterEvent);
+    };
+    window.releaseGuideIdle = () => {
+      map.fire = originalFire;
+      map.fire('idle');
+    };
+  });
+  await toggleGuides(page, {waitForRender: false});
   await openObjects(page);
+  await expect(page.locator('#objects-status')).toHaveText('Loading objects…');
+  await page.evaluate(() => {
+    window.releaseGuideIdle();
+    delete window.releaseGuideIdle;
+  });
   await expect(page.locator('#objects-list')).toContainText(feature.properties.name);
 });

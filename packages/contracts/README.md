@@ -121,22 +121,39 @@ settlement, which has at most one area.
 `editor-bundle.schema.json` defines the editor's source bundle: one filename, byte size, feature count and SHA-256 per
 source file. Version 1 holds the original eight files, version 2 thirteen, version 3 every file of an object on the map,
 including `transit-routes.json` and `turn-restrictions.json`, whose records count as features without geometry, and
-version 4 adds `bridges.geojson` to the declared source set. Released versions are frozen; the producer and the Editor
-keep writing and reading version 3 here. Version 4 is a pending declaration for the next steps, not an emitted bundle:
-the Editor first pins this release and reads version 4, then data emits it. Data-owned assembly preserves bytes, and the
-Editor verifies every listed file. It is built into dist/editor only. See
-[decision 0024](../../docs/decisions/0024-editor-bundle-versions.md) and
-[decision 0037](../../docs/decisions/0037-every-layer-editable.md).
+version 4 adds `bridges.geojson` and `railways.geojson` but leaves out derived `slopes.geojson`, so it declares 23
+source files. Released versions are frozen; the producer and the Editor keep writing and reading version 3 here. Version
+4 is a pending declaration for the next steps, not an emitted bundle: the Editor first pins this release and reads
+version 4, then data emits it. Data-owned assembly preserves bytes, and the Editor verifies every listed file. It is
+built into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md),
+[decision 0037](../../docs/decisions/0037-every-layer-editable.md) and
+[ADR 0048](../../docs/decisions/0048-ridges-are-drawn-slopes-derived.md).
 
 Next release notes: this change is the next `@ivanov-gv/map-contracts` release, but no package is published here.
-Version 4 declares the reviewed bridge outlines in the editor's source set. Its `bridges.geojson` rule allows Polygon
-add, modify and delete; `name` and `name:en` are editable text, while `kind`, `method`, `osmTag` and `sourceRoadIds`
-keep only the values the reviewed source uses. The seed provenance from
-[ADR 0047](../../docs/decisions/0047-bridge-outlines-seeded-once.md) is not re-derived or invented: `method` is `osm` or
-`traced`, an OSM outline carries `man_made=bridge`, and a traced outline names sorted source road IDs. A new object may
-omit those source facts; the importer owns whatever it assigns. Consumers pinned to the previous release keep reading
-frozen version 3, and this release changes no consumer pin. The Editor reads version 4 in its own step before data emits
-it.
+Version 4 declares the reviewed bridge outlines, railway tracks, platforms and stations, and owner-drawn ridges in the
+editor's source set; generated slopes leave it. Its `bridges.geojson` rule allows Polygon add, modify and delete; `name`
+and `name:en` are editable text, while `kind`, `method`, `osmTag` and `sourceRoadIds` keep only the values the reviewed
+source uses. The seed provenance from [ADR 0047](../../docs/decisions/0047-bridge-outlines-seeded-once.md) is not
+re-derived or invented: `method` is `osm` or `traced`, an OSM outline carries `man_made=bridge`, and a traced outline
+names sorted source road IDs. A new object may omit those source facts; the importer owns whatever it assigns. The
+`railways.geojson` rule allows Point, LineString and Polygon add, modify and delete, matching the geometries the
+reviewed source stores. `name`, `gauge` and `ref` are editable text; `kind` and `osmTag` keep only the values the source
+uses, and `osmTag` is add-only provenance. The rule lists the three geometries the source stores but cannot limit them
+by kind, so the Editor could draw a station as a polygon until its version-4 step on #489 adds per-kind geometry limits;
+data validation still refuses such a feature. How a new railway receives its source tag belongs to the Editor and data
+steps that follow.
+
+The `ridges.geojson` rule allows LineString add, modify and delete. `kind` is `ridge`, and `summit` and `summitName`
+stay optional together when a summit is linked. It does not carry `sunlitSide` or `shadedSide`: all 31 ridges stored the
+same `south` and `north` text, no renderer read those sides, and the sun's direction is already the derivation's one
+`SUN_AZIMUTH_DEGREES` convention. Storing it on each ridge would repeat one fact many times, so the data step stops
+writing both properties when it emits version 4. A new or moved ridge must lie inside one green area, and each end must
+meet that area's outline or another ridge. `editor-layers.schema.json` has no field for that topology, so the contract
+states it here: the data step's `check-data` enforces both rules, and the importer runs `check-data` on every changeset.
+The shared `editor-layers.json` still carries the version-3 slope rule while the producer emits version 3; the Editor's
+version-4 step on #490 removes it, derives slope faces in its preview and stops editing slopes directly. Consumers
+pinned to the previous release keep reading frozen version 3, and this release changes no consumer pin. The Editor reads
+version 4 in its own step before data emits it.
 
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows: operations, geometry
 types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the
@@ -167,17 +184,19 @@ object facts only: no per-feature `source`, green-kind list, minimum area, ridge
 values live in the `relief` block of `data/sources/provenance.json`, together with layer sources, and the full build
 report stays in temporary `.build/relief-report.json`. The data validator checks the recorded green kinds against this
 contract's land-kind enum and the discovered kinds against `land.geojson`. Contours, ridges and canyon-rim features are
-`LineString` features; slopes are `Polygon` features. A ridge is one simplified `LineString` on the shared boundary of
-adjacent sunlit and shaded slope polygons inside green areas; it carries a summit link and name only when a summit is
-within 50 m of the line. Derived ridge/slope/contour/DEM-rim IDs are deterministic for pinned inputs but are not stable
-across a DEM or green-area change. Summit `heightCheck` is `missing`, `mismatch` or `ok`: a mismatch needs a closed
-contour above OSM height around the summit or an OSM/DEM difference over 25 m, and a missing OSM height keeps its DEM
-fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
-OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
-and `method: "dem-canyon-bank"`; a rim added in the editor has `method: "editor-drawn"` and no `river` or `bank`. A rim
-may publish one optional integer `height`; how the build measures it belongs to the data runbook. Its owner-painted
-`width` belongs to [ADR 0044](../../docs/decisions/0044-owner-painted-canyon-width.md). Every canyon rim keeps the low
-side on its right; an edge without a river is not compared with a centreline
+`LineString` features; slopes are derived `Polygon` faces cut from green areas by the stored ridges. A ridge is one
+stored `LineString` fact, seeded once from the DEM on 2026-11-27 and not rebuilt by later runs; it lies inside one green
+area and its ends meet that area's outline or another ridge. A green area without ridges stays one flat colour. A summit
+link and name stay with a ridge only when a summit is within 50 m of the line. Derived ridge/slope/contour/DEM-rim IDs
+are deterministic for pinned inputs but are not stable across a DEM or green-area change. Summit `heightCheck` is
+`missing`, `mismatch` or `ok`: a mismatch needs a closed contour above OSM height around the summit or an OSM/DEM
+difference over 25 m, and a missing OSM height keeps its DEM fact without a mismatch. Canyon rims publish OSM
+`natural=cliff` segments as `method: "osm-cliff"` features with their OSM `way/N` identity and version; DEM-derived bank
+segments use `derived:canyon-rim-<river>-<bank>` with `entityPart` and `method: "dem-canyon-bank"`; a rim added in the
+editor has `method: "editor-drawn"` and no `river` or `bank`. A rim may publish one optional integer `height`; how the
+build measures it belongs to the data runbook. Its owner-painted `width` belongs to
+[ADR 0044](../../docs/decisions/0044-owner-painted-canyon-width.md). Every canyon rim keeps the low side on its right;
+an edge without a river is not compared with a centreline
 ([ADR 0042](../../docs/decisions/0042-one-measured-canyon-rim-height.md)). Every contour runs with higher ground on its
 left. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height checks
 and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.

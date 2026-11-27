@@ -247,6 +247,26 @@
         "sourceRoadIds": {"type": "list", "maxLength": 64, "pattern": "^(way|relation)/[1-9][0-9]*$", "addOnly": true}
       }
     },
+    "railways.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point", "LineString", "Polygon"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["disused_rail", "halt", "platform", "rail", "station"]},
+        "name": {"maxLength": 128},
+        "osmTag": {
+          "enum": [
+            "disused:railway=rail",
+            "railway=halt",
+            "railway=platform",
+            "railway=rail",
+            "railway=station"
+          ],
+          "addOnly": true
+        },
+        "gauge": {"maxLength": 128},
+        "ref": {"maxLength": 128}
+      }
+    },
     "road-nodes.geojson": {
       "operations": ["add", "modify", "delete"],
       "geometries": ["Point"],
@@ -379,9 +399,12 @@
       "properties": {}
     },
     "ridges.geojson": {
-      "operations": ["modify"],
+      "operations": ["add", "modify", "delete"],
       "geometries": ["LineString"],
       "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["ridge"]},
+        "summit": {"pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"},
+        "summitName": {"maxLength": 120},
         "name": {"maxLength": 120}
       }
     },
