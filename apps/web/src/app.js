@@ -31,7 +31,8 @@ import {
   markerKeys,
   placeBands,
   buildPlaceMarkers,
-  placeLayers
+  placeLayers,
+  roadLayerIds
 } from '@ivanov-gv/map-core';
 import {ArchiveSource} from './offline.js';
 import {installTransport, TransportFeed} from './transport.js';
@@ -143,7 +144,8 @@ const routeEndpoints = {from: null, to: null};
 const prefersReducedMotion = isReducedMotionPreferred();
 const distanceRefreshDelayMilliseconds = 200;
 // Road lines, not road labels: a label's point geometry cannot supply a street segment for the highlight or the card.
-const roadNameLayers = [
+// Map-core owns the layer ids, so its road list stays in step when roads under a bridge get their own layers.
+const roadNameLayers = roadLayerIds([
   'steps',
   'cycleways',
   'paths',
@@ -151,7 +153,7 @@ const roadNameLayers = [
   'pedestrian-streets',
   'minor-roads',
   'major-roads'
-];
+]);
 
 const placeSelection = new PlaceSelection({
   map: () => mapState.map,
@@ -694,6 +696,7 @@ function registerPublicMapEvents() {
       placeHitLayers: directoryState.placeHitLayers,
       placesById: directoryState.placesById,
       buildingAddresses: directoryState.buildingAddresses,
+      roadLayers: roadNameLayers,
       showPlace: placeSelection.showPlace,
       showPoint: placeSelection.showPoint,
       onEmptyTap: () => mapState.interface?.handleEmptyMapTap() ?? false
