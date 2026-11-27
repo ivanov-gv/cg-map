@@ -97,6 +97,7 @@ already shows.
 | water             | `water.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                                           |
 | roads             | `roads.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel`, `inGreenArea` |
 | railways          | `railways.geojson`                                  | 12–17                                         | `kind`, `name`, `name:en`, `ref`                                                                                              |
+| bridges           | `bridges.geojson`                                   | 12–17                                         | `kind`, `name`, `method`                                                                                                      |
 | buildings         | `buildings.geojson`                                 | 13–17                                         | `kind`, `building:levels`                                                                                                     |
 | contours          | `contours.geojson`                                  | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
 | slopes            | `slopes.geojson`                                    | 12–17                                         | `aspect`                                                                                                                      |
@@ -143,6 +144,34 @@ Inside the detail box the extractor publishes `railway=rail|narrow_gauge|light_r
 `train=yes`. Disused and abandoned objects keep their status in the published kind, and provenance records candidate and
 imported counts for both states, including zeros. Features keep their OSM identity and version. The source is staged
 display geometry: it is not in the version-2 editor bundle until a later step adds an editor mode.
+
+## Bridges
+
+`bridges.geojson` has one Polygon per crossing. Refresh the OSM `man_made=bridge` areas with the reviewed PBF; the
+partial run replaces only this source and its layer checksum and OSM area count in provenance:
+
+```sh
+python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers bridges \
+  --source-url https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf \
+  --source-date 2026-11-21
+```
+
+The extractor keeps reviewed traced outlines from the staged source, so this command never re-derives them. Trace a
+newly covered road set only as a deliberate seed step after reviewing the OSM output and the roads it does not cover:
+
+```sh
+python3 data/tools/seed_bridge_outlines.py --root .
+```
+
+The seed groups uncovered bridge roads within 15 m when they share an endpoint or name, or either is a walking or
+cycling kind. A road within 1 m of an OSM outline counts as covered: the OSM area and the road line are simplified and
+rounded independently, so a sub-metre gap is not a second bridge. It buffers each uncovered group by 10 m, removes OSM
+outlines with that same 1 m clearance so no traced deck overlaps a mapped one, then simplifies by 1 m and rounds to six
+decimals. Each traced outline records its source road IDs, uses `derived:bridge-*` identity with a content-hash version,
+and is marked `method: traced`. OSM areas keep `method: osm` and their OSM identity. Review the counts in
+`bridge_counts` and the parameters in `bridge_seed` in `sources/provenance.json`, then rebuild the archive because the
+geometry changed. See [decision 0047](../decisions/0047-bridge-outlines-seeded-once.md). Like railways, this source is
+staged display geometry outside the pinned editor bundle until a later step defines its editor mode.
 
 The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
 an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a
@@ -206,15 +235,15 @@ data/tools/extract-osm.py replaces places.geojson and then reapplies the policy,
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
-municipalities.geojson), `settlements`, `places`, `protected-areas` (protected-areas.geojson), and `railways`
-(railways.geojson); each group replaces only its own source files. A partial run must use the PBF whose SHA-256 is in
-provenance.json; a different input fails and asks for a full extract. The `buildings` group writes both
-`buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places` group in the same
-run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that join; this Feature
-does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed `land.geojson` as
-its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point. Run them together
-when refreshing either source. `context-countries.geojson` is a preserved input to the land and water layers, refreshed
-only on a full run. Fix the policy, then review the new facts as above.
+municipalities.geojson), `settlements`, `places`, `protected-areas` (protected-areas.geojson), `railways`
+(railways.geojson), and `bridges` (bridges.geojson); each group replaces only its own source files. A partial run must
+use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a full extract. The `buildings`
+group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places`
+group in the same run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that
+join; this Feature does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed
+`land.geojson` as its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point.
+Run them together when refreshing either source. `context-countries.geojson` is a preserved input to the land and water
+layers, refreshed only on a full run. Fix the policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
