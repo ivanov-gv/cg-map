@@ -55,11 +55,10 @@ Rules:
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules
   ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)) are a development dependency recorded above;
-  the planner selects the projects whose configs exist in the checkout: the six non-app projects and all three apps,
-  including apps/web, without a planner change. A project's config selects that project's verify; an app config also
-  selects the app's folder, whose workflow runs its browser shards. The planner has no lint-only folder. The root
-  `eslint.config.mjs` still governs repository-level files and the pre-commit fallback, so a change to it keeps the
-  whole-plan selection until the follow-up root cleanup.
+  the planner selects the projects whose configs exist in the checkout: the six non-app projects and all three apps. A
+  project's config selects that project's verify; an app config also selects the app's folder, whose workflow runs its
+  browser shards. The planner has no lint-only folder. The root `eslint.config.mjs` is retired, so a change to that path
+  selects only platform's hook and layout checks.
 - Both map apps own their browser suites and shard counts; the planner only selects folders. See
   [web instructions](../../apps/web/AGENTS.md), [editor instructions](../../apps/editor/AGENTS.md) and
   [workflow testing](../../.github/TESTING.md#on-github).
@@ -70,10 +69,9 @@ Rules:
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
   it publishes by setting the data and contracts versions; `platform/tools/phone-tags.mjs`, which platform's tag check
   and both apps' own unit tests read at HEAD while no runtime app imports it; and development tooling: the six non-app
-  configs and all three apps read `platform/eslint-rules.mjs` at HEAD through their own configs. The separate root
-  config still imports ESLint's own presets directly for repository-level files until the follow-up cleanup removes it.
-  It is repository tooling like the ESLint binary and its plugins, not runtime data; a pinned package would need a
-  release for each rule change. Owner approval for this narrow exception is requested in the #458 PR
+  configs and all three apps read `platform/eslint-rules.mjs` at HEAD through their own configs. It is repository
+  tooling like the ESLint binary and its plugins, not runtime data; a pinned package would need a release for each rule
+  change. Owner approval for this narrow exception is requested in the #458 PR
   ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).
 
 ### Core modes
