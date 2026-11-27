@@ -68,18 +68,27 @@ test('editor bundle versions freeze each version and add to the one before', () 
         'turn-restrictions.json'
       ]
     ],
-    [4, ['bridges.geojson']]
+    [4, ['bridges.geojson', 'railways.geojson']]
   ]);
+  const removals = new Map([[4, ['slopes.geojson']]]);
   let previousFiles = [];
   for (const version of [1, 2, 3, 4]) {
     const branch = branches.get(version);
     const files = branch.properties.layers.items.properties.filename.enum;
-    assert.deepEqual(files, [...previousFiles, ...additions.get(version)].sort());
+    const removedFiles = removals.get(version) ?? [];
+    const retainedFiles = previousFiles.filter(filename => !removedFiles.includes(filename));
+    assert.deepEqual(files, [...retainedFiles, ...additions.get(version)].sort());
     assert.equal(branch.properties.layers.minItems, files.length);
     assert.equal(branch.properties.layers.maxItems, files.length);
     assert.deepEqual([...new Set(files)].sort(), files);
     previousFiles = files;
   }
+  // A bundled file without rules could be shown and never edited, and rules without a file could never be reached.
+  // The rules cover both the emitted version 3 and the pending version 4 the Editor will read next.
+  const emittedAndPendingFiles = [
+    ...new Set([...branches.get(3).properties.layers.items.properties.filename.enum, ...previousFiles])
+  ].sort();
+  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), emittedAndPendingFiles);
 });
 
 test('bridges are an editable polygon layer with only reviewed property rules', () => {
@@ -97,13 +106,36 @@ test('bridges are an editable polygon layer with only reviewed property rules', 
   });
 });
 
-// A bundled file without rules could be shown and never edited, and rules without a file could never be reached.
-test('the editing rules cover exactly the files of the declared version 4 source set', () => {
-  const branches = readJSON('editor-bundle.schema.json').oneOf;
-  const version4 = branches.find(branch => branch.properties.version.const === 4);
-  assert.ok(version4, 'the contract declares version 4');
-  const declaredFiles = version4.properties.layers.items.properties.filename.enum;
-  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), [...declaredFiles].sort());
+test('railways are editable as stored, with only the reviewed property rules', () => {
+  assert.deepEqual(readJSON('editor-layers.json').layers['railways.geojson'], {
+    operations: ['add', 'modify', 'delete'],
+    geometries: ['Point', 'LineString', 'Polygon'],
+    properties: {
+      kind: {requiredOnAdd: true, enum: ['disused_rail', 'halt', 'platform', 'rail', 'station']},
+      name: {maxLength: 128},
+      osmTag: {
+        enum: ['disused:railway=rail', 'railway=halt', 'railway=platform', 'railway=rail', 'railway=station'],
+        addOnly: true
+      },
+      gauge: {maxLength: 128},
+      ref: {maxLength: 128}
+    }
+  });
+});
+
+// The sun's direction is one derivation convention, not a fact repeated on each ridge.
+test('ridges are drawn facts with only the reviewed property rules', () => {
+  const layers = readJSON('editor-layers.json').layers;
+  assert.deepEqual(layers['ridges.geojson'], {
+    operations: ['add', 'modify', 'delete'],
+    geometries: ['LineString'],
+    properties: {
+      kind: {requiredOnAdd: true, enum: ['ridge']},
+      summit: {pattern: '^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$'},
+      summitName: {maxLength: 120},
+      name: {maxLength: 120}
+    }
+  });
 });
 
 test('canyon rims state one optional whole-metre width beside their height', () => {
