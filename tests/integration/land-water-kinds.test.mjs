@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {mapStyle} from '../../packages/map-core/src/map-style.js';
+import {mapStyle, roadLayerIds} from '../../packages/map-core/src/map-style.js';
 import {selectTappedFeature} from '../../apps/web/src/map-selection.js';
 import {describePoint} from '../../apps/web/src/point-selection.js';
 import {readContractJSON} from '../contracts-root.mjs';
@@ -9,6 +9,18 @@ import {dataSourcePath} from '../data-root.mjs';
 
 const preservedLandKinds = new Set(['country', 'context']);
 const derivedWaterKinds = new Set(['ocean']);
+// Integration reads sibling sources at HEAD, so mirror the road layers app.js passes to selection.
+const roadLayers = roadLayerIds([
+  'steps',
+  'cycleways',
+  'paths',
+  'footways',
+  'park-routes',
+  'pedestrian-streets',
+  'minor-roads',
+  'major-roads'
+]);
+
 // The shared rules are not versioned: they already offer the pending version-5 shade, while data and consumers still
 // use the kinds extracted at HEAD.
 const pendingEditorLandKinds = ['shade'];
@@ -44,6 +56,7 @@ function selectedName(kind) {
     buildingAddresses: new Map(),
     placeHitLayers: [],
     placesById: new Map(),
+    roadLayers,
     showPlace: () => {},
     showPoint: point => selected.push(point.name)
   });
