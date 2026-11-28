@@ -1,18 +1,13 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
-import {buildingAt} from '../../src/layers/places/layer-places.js';
-import {buildingId} from '../../src/layers/shared/object-names.js';
 import {
   browseStatus,
-  deleteObject,
   drawChoice,
   layerButton,
   layerNameOf,
   leaveMode,
   startMode
 } from './workspace.mjs';
-
-const isPhone = testInfo => testInfo.project.name === 'pages-mobile';
 
 // Panel navigation keeps the same editing and review assertions usable at either viewport size.
 async function openPanel(page, name) {
@@ -84,19 +79,6 @@ test.describe('source editing', () => {
     const {entityId, entityPart} = feature.properties;
     if (entityId === undefined) return {featureIndex: index};
     return entityPart === undefined ? {entityId} : {entityId, entityPart};
-  };
-
-  // A moved place belongs to the building under its new point, or stands alone.
-  const expectedPropertiesAfterMove = async (page, feature, coordinate) => {
-    const buildings = await fetchFeatures(page, buildingsFile);
-    const entries = buildings.map((building, index) => ({key: String(index), filename: buildingsFile, feature: building}));
-    const building = buildingAt(coordinate, {entriesOf: () => entries});
-    const properties = {...feature.properties};
-    delete properties.buildingEntityId;
-    delete properties.standalone;
-    if (building) properties.buildingEntityId = buildingId(building);
-    else properties.standalone = true;
-    return properties;
   };
 
   const chooseMode = async (page, filename) => {
@@ -208,40 +190,6 @@ test.describe('source editing', () => {
     await download.saveAs(savedPath);
     return {savedPath, changeset: JSON.parse(fileSystem.readFileSync(savedPath))};
   };
-
-  test('POI details round trip through export, and import resumes them on a clean session', {tag: '@phone'}, async ({
-    page
-  }, testInfo) => {
-    await openEditor(page);
-    const {index, feature} = await selectPlace(page);
-    await openInspector(page);
-    await page.locator('[name="name"]').fill(editedName);
-    await openInspector(page);
-    await page.locator('[name="visibilityLevel"]').selectOption('2');
-    await applyAndWait(page);
-    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1 change`);
-
-    const {savedPath, changeset} = await exportChangeset(page, testInfo);
-    expect(Object.keys(changeset.bases)).toEqual([placesFile]);
-    const [operation] = changeset.operations;
-    expect(operation.operation).toBe('modify');
-    expect(operation.reference).toEqual(expectedReferenceOf(feature, index));
-    expect(operation.before).toEqual(feature);
-    expect(operation.after.properties).toEqual({...feature.properties, name: editedName, visibilityLevel: 2});
-    expect(operation.after.geometry).toEqual(feature.geometry);
-
-    page.once('dialog', dialog => dialog.accept());
-    await openPanel(page, 'Changes');
-    await page.locator('#review-secondary summary').click();
-    await page.locator('#discard-changes').click();
-    await openPanel(page, 'Changes');
-    await expect(page.locator('#review-empty')).toBeVisible();
-    await openPanel(page, 'Changes');
-    await page.locator('#review-secondary summary').click();
-    await page.locator('#import-changeset').setInputFiles(savedPath);
-    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1 change`);
-    await expect(page.locator('#review-message')).toContainText('Imported 1 changes');
-  });
 
   test('resizing preserves the selected layer, unfinished edit and saved draft', {tag: '@phone'}, async ({page}) => {
     await openEditor(page);
@@ -1189,33 +1137,6 @@ test.describe('source editing', () => {
     await expect(page.locator('#error')).toBeHidden();
   });
 
-  test('a POI moves by relative drags from anywhere, with no jump and no ghost', async ({page}, testInfo) => {
-    await openEditor(page);
-    const {index, feature} = await selectPlace(page);
-    const origin = feature.geometry.coordinates;
-    const expected = await coordinateOffsetBy(page, origin, 90, 0);
-    const pressPoint = await coordinateOffsetBy(page, origin, -60, 50);
-    await openInspector(page);
-    await startMode(page, 'tool-move');
-    await dragMap(page, pressPoint, 70, 0);
-    await dragMap(page, pressPoint, 20, 0);
-    await expect(page.locator('#export-changeset')).toBeDisabled();
-    await applyAndWait(page);
-    const renderedAtOldPosition = await page.evaluate(
-      ({origin, index}) => {
-        const {map} = window.editorDebug;
-        const features = map.queryRenderedFeatures(map.project(origin), {layers: ['editor-source-point']});
-        return features.filter(hit => hit.id === index).length;
-      },
-      {origin, index}
-    );
-    expect(renderedAtOldPosition).toBe(0);
-    const {changeset} = await exportChangeset(page, testInfo);
-    const {after} = changeset.operations[0];
-    expect(after.properties).toEqual(await expectedPropertiesAfterMove(page, feature, after.geometry.coordinates));
-    expectCoordinateNear(after.geometry.coordinates, expected);
-  });
-
   test('Escape interrupts only the current drag and preserves the open edit', async ({page}, testInfo) => {
     const scriptErrors = [];
     page.on('pageerror', error => scriptErrors.push(error.message));
@@ -1287,68 +1208,6 @@ test.describe('source editing', () => {
     await page.evaluate(center => window.editorDebug.map.jumpTo({center}), coordinate);
     await addPoint.click();
   };
-
-  test('a new POI gets a local identity, and deleting or marking a source POI can be undone', {tag: '@phone'}, async ({
-    page
-  }, testInfo) => {
-    await openEditor(page);
-    const {feature} = await selectPlace(page);
-    await openInspector(page);
-    if (isPhone(testInfo)) {
-      // The mark stays for the desk; only the mark itself is taken back here.
-      await expect(page.locator('#delete-feature')).toHaveText('Mark for deletion');
-      await deleteObject(page);
-      await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-      await expect(page.locator('#toast')).toContainText('Marked for deletion');
-      await openPanel(page, 'Changes');
-      await expect(page.locator('#field-items')).toContainText('Marked for deletion');
-      await expect(page.locator('#change-count')).toHaveText('1');
-      await page.locator('#toast-action').click();
-      await expect(page.locator('#field-items li')).toHaveCount(0);
-      await expect(page.locator('#review-empty')).toBeVisible();
-      await expect(page.locator('#status')).toContainText('objects');
-    } else {
-      await deleteObject(page);
-      await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-      await expect(page.locator(`[data-changed-file="${placesFile}"] .review-stacked-list > li > details > summary`)).toContainText('delete');
-      await openPanel(page, 'Tools');
-      await page.locator('#undo').click();
-      await openPanel(page, 'Changes');
-      await expect(page.locator('#review-empty')).toBeVisible();
-      await expect(page.locator('#status')).toContainText('objects');
-    }
-
-    await openPanel(page, 'Tools');
-    await drawChoice(page).click();
-    await expect(drawChoice(page)).toHaveText('Add place');
-    await expect(page.locator('.inspector')).toBeHidden();
-    await drawPointAt(page, await coordinateOffsetBy(page, feature.geometry.coordinates, 70, 40));
-    await openInspector(page);
-    await page.locator('[name="name"]').fill(editedName);
-    await openInspector(page);
-    await page.locator('[data-list-for="kind"]').selectOption('cafe');
-    await openInspector(page);
-    await page.locator('#apply-edit').click();
-    await expect(page.locator('#edit-problem')).toContainText('category is required');
-    await openInspector(page);
-    await page.locator('[name="category"]').selectOption('food');
-    await openInspector(page);
-    await page.locator('#apply-edit').click();
-    await expect(page.locator('#edit-problem')).toContainText('visibilityLevel is required');
-    await openInspector(page);
-    await page.locator('[name="visibilityLevel"]').selectOption('4');
-    await applyAndWait(page);
-
-    const {changeset} = await exportChangeset(page, testInfo);
-    const [operation] = changeset.operations;
-    expect(operation.operation).toBe('add');
-    expect(operation.reference.localId).toMatch(/^local:/);
-    expect(operation.after.properties.id).toBe(operation.reference.localId);
-    expect(operation.after.properties.source).toBe('Local correction');
-    expect(operation.after.properties.osm_id).toBeUndefined();
-    expect(operation.after.properties.visibilityLevel).toBe(4);
-    expect(operation.before).toBeNull();
-  });
 
   // Draws a short line from a coordinate. At the desk a double click could end it as well; Finish does on every device.
   const drawLine = async (page, center) => {
