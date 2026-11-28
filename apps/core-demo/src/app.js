@@ -21,21 +21,25 @@ let places;
 let visibilityConfig;
 let archiveURL;
 let overlayFeature;
-let resolvedVisibilitySamples = [];
 let isSatelliteVisible = false;
 let isOverlayVisible = true;
 let isOverlayEditable = false;
 const overlayShiftPixels = 20;
 
-// Version-5 samples have a stable identity and no stored level, so the policy or an override must resolve them.
-// They sit outside the default view: today's map looks unchanged until a control button moves the camera to one.
+// Version-5 samples have a stable local identity and content version, but no stored level: the policy or an override
+// must resolve them. They sit outside the default view, so today's map looks unchanged until a button is used.
 export const demoVisibilitySamples = [
   {
     id: 'kind-band',
     label: 'Kind rule · museum',
     feature: {
       type: 'Feature',
-      properties: {entityId: 'demo/kind-band', kind: 'museum', name: 'Kind-band sample'},
+      properties: {
+        entityId: 'local:7c9e6679-7425-4f5d-9e8b-8f1b0d3a2c41',
+        entityVersion: 'sha256:29b088dea7f03528cf7cce8d0e3207955073d27da72ed35293b713d2b0c883fb',
+        kind: 'museum',
+        name: 'Kind-band sample'
+      },
       geometry: {type: 'Point', coordinates: [19.56, 42.11]}
     }
   },
@@ -45,7 +49,8 @@ export const demoVisibilitySamples = [
     feature: {
       type: 'Feature',
       properties: {
-        entityId: 'demo/override-band',
+        entityId: 'local:2f8b1c4d-6a7e-4b3f-8c2d-5e9a0f1b7d63',
+        entityVersion: 'sha256:542759f9156598cb6a34227545b8c6c41a020f4326884a321818bdeca18d4730',
         kind: 'museum',
         name: 'Override-band sample',
         visibilityOverride: 4
@@ -55,11 +60,18 @@ export const demoVisibilitySamples = [
   }
 ];
 
+// A failed policy fetch leaves no resolved levels, so the card must not sit at "Loading" beside the error banner.
+function showZoomBandsUnavailable() {
+  const readout = elementById('zoom-bands');
+  if (readout.textContent === 'Loading zoom bands') readout.textContent = 'Zoom bands unavailable';
+}
+
 // Errors stay visible even if only part of a map rendered successfully.
 function showError(error) {
   elementById('error').textContent = error.message;
   elementById('error').hidden = false;
   elementById('status').textContent = 'Map needs attention';
+  showZoomBandsUnavailable();
 }
 
 async function loadJSON(url) {
@@ -84,8 +96,7 @@ export function resolveDemoVisibility(rawConfig, policy) {
   return {config, samples};
 }
 
-function showVisibilitySamples(samples) {
-  resolvedVisibilitySamples = samples;
+function showZoomBandReadout(samples) {
   const descriptions = samples.map(sample => `${sample.label}: level ${sample.level} · zoom ${sample.zoom}`);
   elementById('zoom-bands').textContent = descriptions.join(' · ');
 }
@@ -237,7 +248,7 @@ function clearOverlaySelection() {
 }
 
 // Handlers read the current map, so they stay valid when the map is recreated.
-function registerConceptControls() {
+function registerConceptControls(samples) {
   elementById('reset').onclick = () => map.jumpTo({center: defaultCenter, zoom: 15, bearing: 0, pitch: 0});
   elementById('recreate').onclick = recreateConceptMap;
   elementById('satellite').onclick = toggleSatellite;
@@ -248,7 +259,7 @@ function registerConceptControls() {
   elementById('overlay-toggle').onclick = toggleOverlay;
   elementById('overlay-editable').onclick = toggleOverlayEditable;
   elementById('clear-selection').onclick = clearOverlaySelection;
-  for (const sample of resolvedVisibilitySamples) {
+  for (const sample of samples) {
     elementById(sample.id).onclick = () => map.jumpTo({center: sample.coordinates, zoom: sample.zoom});
   }
 }
@@ -265,10 +276,10 @@ async function start() {
   if (!archiveFilenamePattern.test(mapMetadata.archive)) throw new Error('Invalid map archive metadata.');
   const {config, samples} = resolveDemoVisibility(rawVisibilityConfig, rawVisibilityPolicy);
   visibilityConfig = config;
-  showVisibilitySamples(samples);
+  showZoomBandReadout(samples);
   archiveURL = 'pmtiles://' + new URL(`data/${mapMetadata.archive}`, location.href).href;
   registerArchiveProtocol(maplibregl, pmtiles);
-  registerConceptControls();
+  registerConceptControls(samples);
   await recreateConceptMap();
 }
 

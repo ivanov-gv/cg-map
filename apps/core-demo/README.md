@@ -27,8 +27,10 @@ to keep shared features independently visible and reviewable, not to be another 
 
 The POI visibility card resolves two version-5 samples that have no stored level. One follows the exact kind rule in the
 data-owned [place visibility policy](../../data/sources/place-visibility-policy.json), and one carries a
-`visibilityOverride`. The card states each resolved level and zoom threshold; each button moves the map to its sample at
-that threshold. The samples sit outside the default view, so today's map looks unchanged until a button is used.
+`visibilityOverride`. Each sample has a distinct, stable `local` identity and content version, checked against the
+pinned identity contract. The card states each resolved level and zoom threshold; each button moves the map to its
+sample at that threshold. If the policy cannot load, the card reports `Zoom bands unavailable` beside the page error.
+The samples sit outside the default view, so today's map looks unchanged until a button is used.
 
 Add a simple control here whenever core gains a capability. Assets retain their single source in packages/map-core and
 data; the build copies them into separate artifacts. See [map-core](../../packages/map-core/README.md).

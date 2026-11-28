@@ -2,22 +2,46 @@ import {test, expect} from '@playwright/test';
 
 // The two version-5 samples are resolved by the data policy and installed away from the default view.
 const visibilitySamples = [
-  {buttonId: 'kind-band', center: [19.56, 42.11], level: 2, markerId: 'demo/kind-band', zoom: 14},
-  {buttonId: 'override-band', center: [19.58, 42.11], level: 4, markerId: 'demo/override-band', zoom: 16}
+  {
+    buttonId: 'kind-band',
+    center: [19.56, 42.11],
+    markerId: 'local:7c9e6679-7425-4f5d-9e8b-8f1b0d3a2c41',
+    zoom: 14
+  },
+  {
+    buttonId: 'override-band',
+    center: [19.58, 42.11],
+    markerId: 'local:2f8b1c4d-6a7e-4b3f-8c2d-5e9a0f1b7d63',
+    zoom: 16
+  }
 ];
 
 // Checks that a sample renders at its resolved zoom threshold and not one zoom level below it.
 async function checkVisibilitySampleBand(page, sample) {
-  const layerId = `place-icons-${sample.level}-open`;
+  const layerIds = await page.evaluate(() =>
+    window.coreDemoDebug.map
+      .getStyle()
+      .layers.filter(layer => layer.id.startsWith('place-icons-'))
+      .map(layer => layer.id)
+  );
+  expect(layerIds.length).toBeGreaterThan(0);
   const isSampleRendered = () =>
     page.evaluate(
-      ({layerId, markerId}) =>
+      ({layerIds, markerId}) =>
         window.coreDemoDebug.map
-          .queryRenderedFeatures({layers: [layerId]})
+          .queryRenderedFeatures({layers: layerIds})
           .some(feature => feature.properties.markerKey === markerId),
-      {layerId, markerId: sample.markerId}
+      {layerIds, markerId: sample.markerId}
     );
-  await page.locator(`#${sample.buttonId}`).click();
+  await page.evaluate(
+    buttonId =>
+      new Promise(resolve => {
+        const map = window.coreDemoDebug.map;
+        map.once('idle', resolve);
+        document.getElementById(buttonId).click();
+      }),
+    sample.buttonId
+  );
   await expect.poll(() => page.evaluate(() => window.coreDemoDebug.map.getZoom())).toBe(sample.zoom);
   const isCentered = await page.evaluate(center => {
     const mapCenter = window.coreDemoDebug.map.getCenter();
@@ -25,7 +49,15 @@ async function checkVisibilitySampleBand(page, sample) {
   }, sample.center);
   expect(isCentered).toBe(true);
   await expect.poll(isSampleRendered).toBe(true);
-  await page.evaluate(zoom => window.coreDemoDebug.map.jumpTo({zoom}), sample.zoom - 1);
+  await page.evaluate(
+    zoom =>
+      new Promise(resolve => {
+        const map = window.coreDemoDebug.map;
+        map.once('idle', resolve);
+        map.jumpTo({zoom});
+      }),
+    sample.zoom - 1
+  );
   await expect.poll(isSampleRendered).toBe(false);
 }
 
@@ -127,5 +159,15 @@ test.describe('core concepts', () => {
     await expect(page.locator('#status')).toHaveText('Ready · core imports only');
     await expect(page.locator('#error')).toBeHidden();
     await expect(page.locator('.maplibregl-canvas')).toHaveCount(1);
+  });
+
+  test('core concept app marks zoom bands unavailable when the policy cannot load', async ({page}) => {
+    await page.route('**/data/place-visibility-policy.json', route =>
+      route.fulfill({status: 500, contentType: 'text/plain', body: 'Simulated policy failure'})
+    );
+    await page.goto('./');
+    await expect(page.locator('#error')).toContainText('HTTP 500');
+    await expect(page.locator('#status')).toHaveText('Map needs attention');
+    await expect(page.locator('#zoom-bands')).toHaveText('Zoom bands unavailable');
   });
 });
