@@ -21,15 +21,22 @@ function slopeLayer(aspect, group, color) {
   });
 }
 
-// OSM height first; the terrain model's when OSM has none, rounded to whole metres like a printed map.
-const summitHeight = ['round', ['coalesce', ['get', 'ele'], ['get', 'demElevation']]];
+// Only the summit's own stored OSM height is shown, rounded to whole metres like a printed map. The terrain
+// model's height never stands in for a missing one (ADR 0049).
+const hasElevation = ['!=', ['get', 'ele'], null];
+const heightText = ['to-string', ['round', ['get', 'ele']]];
 const hasName = ['all', ['has', 'name'], ['!=', ['get', 'name'], '']];
-// "Gorica · 130 m"; an unnamed summit shows its height only.
+// "Gorica · 130 m". Without `ele` the name stands alone: no separator, no unit and no invented number.
 export const summitText = [
   'case',
-  hasName,
-  ['concat', ['get', 'name'], ' · ', ['to-string', summitHeight], ' m'],
-  ['concat', ['to-string', summitHeight], ' m']
+  hasElevation,
+  [
+    'case',
+    hasName,
+    ['concat', ['get', 'name'], ' · ', heightText, ' m'],
+    ['concat', heightText, ' m']
+  ],
+  ['case', hasName, ['get', 'name'], '']
 ];
 
 function summitLayer() {
@@ -81,6 +88,22 @@ function parkNameLayer() {
       'text-halo-width': 1
     }
   });
+}
+
+// Stored shades will replace derived shaded slopes. Data publishes them in their own tile layer, so the style reads
+// only the polygon's own kind and paints it with the same tone and zoom as today's shaded slope.
+export function shadeLayers() {
+  return [
+    inDrawingGroup('shades', {
+      id: 'shades',
+      type: 'fill',
+      source,
+      'source-layer': 'shades',
+      minzoom: reliefMinZoom,
+      filter: ['==', ['get', 'kind'], 'shade'],
+      paint: {'fill-color': colors.shadedSlope, 'fill-antialias': false}
+    })
+  ];
 }
 
 export function slopeLayers() {
