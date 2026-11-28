@@ -4,7 +4,7 @@ import fileSystem from 'node:fs';
 const contentTypes = {
   'sw.js': 'text/javascript',
   'offline-manifest.js': 'text/javascript',
-  'app-updates.js': 'text/javascript',
+  'offline/app-updates.js': 'text/javascript',
   'version.txt': 'text/plain'
 };
 
@@ -14,7 +14,7 @@ function serveRelease(request, response, state, scope) {
   const isWorkerScript = ['sw.js', 'offline-manifest.js'].includes(assetPath);
   response.setHeader('Content-Type', contentTypes[assetPath] ?? 'text/html');
   response.setHeader('Cache-Control', isWorkerScript ? 'no-cache' : 'public, max-age=3600');
-  if (assetPath === 'sw.js' || assetPath === 'app-updates.js') {
+  if (assetPath === 'sw.js' || assetPath === 'offline/app-updates.js') {
     const artifactURL = new URL(`../../../../dist/web/${assetPath}`, import.meta.url);
     response.end(fileSystem.readFileSync(artifactURL));
     return;
@@ -22,7 +22,7 @@ function serveRelease(request, response, state, scope) {
   if (assetPath === 'offline-manifest.js') {
     const manifest = {
       shellCache: 'kompas-shell-update-test-' + state.version,
-      shell: ['index.html', 'app-updates.js', 'version.txt']
+      shell: ['index.html', 'offline/app-updates.js', 'version.txt']
     };
     response.end('self.KOMPAS_OFFLINE=' + JSON.stringify(manifest) + ';');
     return;
@@ -42,7 +42,7 @@ function serveRelease(request, response, state, scope) {
   sessionStorage.loads = String(Number(sessionStorage.loads || 0) + 1);
 </script>
 <script type="module">
-  import {registerAppUpdates} from './app-updates.js';
+  import {registerAppUpdates} from './offline/app-updates.js';
   window.registration = await registerAppUpdates();
 </script>`);
 }
