@@ -273,12 +273,12 @@ function reachedMainModules(sourceDirectory, moduleName) {
   return mainRuntimeModules.filter(name => reached.has(name));
 }
 
-// A reviewed rule names a path from main. If #456 moves that path again, the rule moves into this file's per-folder rules.
+// A reviewed rule names a path from main. If that path moves again, update this file's per-folder rules.
 export function assertReviewedModulesExist(sourceDirectory = defaultSourceDirectory) {
   for (const moduleName of mainRuntimeModules) {
     assert.ok(
       fs.existsSync(path.join(sourceDirectory, moduleName)),
-      `${moduleName}: reviewed module missing from src. Move its rule into the per-folder rules of #456.`
+      `${moduleName}: reviewed module missing from src. Move its rule into this file's per-folder rules.`
     );
   }
 }

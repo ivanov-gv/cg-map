@@ -6,13 +6,13 @@ alternatives.
 
 ## 1. Runtime boundaries
 
-| Context                | Code                                                        | Responsibility                                                                           |
-| ---------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Browser main thread    | app.js, core.js, offline.js, position.js, packages/map-core | UI state, event handlers, map configuration and archive access                           |
-| MapLibre internals     | vendor/maplibre-gl.js and its workers                       | Tile preparation, label placement and WebGL rendering                                    |
-| Service-worker context | sw.js, offline-manifest.js                                  | Serve cached application assets and manage shell-cache lifecycle                         |
-| Build process          | tools/ plus ../../data/                                     | Assemble the web artifact and generate offline manifests; data owns tile generation      |
-| Static host            | GitHub Pages                                                | Serve the verified dist/web artifact directly at /cg-map/, including archive byte ranges |
+| Context                | Code                                                                                | Responsibility                                                                           |
+| ---------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Browser main thread    | app.js, shared/core.js, offline/offline.js, location/position.js, packages/map-core | UI state, event handlers, map configuration and archive access                           |
+| MapLibre internals     | vendor/maplibre-gl.js and its workers                                               | Tile preparation, label placement and WebGL rendering                                    |
+| Service-worker context | sw.js, offline-manifest.js                                                          | Serve cached application assets and manage shell-cache lifecycle                         |
+| Build process          | tools/ plus ../../data/                                                             | Assemble the web artifact and generate offline manifests; data owns tile generation      |
+| Static host            | GitHub Pages                                                                        | Serve the verified dist/web artifact directly at /cg-map/, including archive byte ranges |
 
 The browser keeps one MapLibre instance alive. Search, selection and layer switching update existing DOM elements and
 map sources/layers. There is no per-interaction backend request.

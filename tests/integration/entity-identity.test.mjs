@@ -7,7 +7,7 @@ import {dataToolURL} from '../data-root.mjs';
 import {contractURL, contractsDirectory, readContractJSON} from '../contracts-root.mjs';
 import {decodeSource, validateBundleManifest} from '../../apps/editor/src/source-data/source-bundle.js';
 import {normalizePlaces, parseVisibilityConfig, markerKeys} from '@ivanov-gv/map-core';
-import {matchesPlaceSearch, selectNearestPlaces} from '../../apps/web/src/core.js';
+import {matchesPlaceSearch, selectNearestPlaces} from '../../apps/web/src/shared/core.js';
 
 const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
 const {validateCollection, validateStops, validateBuildingLabels} = await import(dataToolURL('check-data.mjs'));

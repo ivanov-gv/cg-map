@@ -128,10 +128,10 @@ Moved to map-core; the public app imports them directly and no compatibility ent
 
 Still in apps/web and only candidates for later extraction, when the editor shows a need:
 
-| Candidate                      | Existing code                                                               | Boundary                                                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Object hit testing / selection | apps/web/src/selection/object-selection.js, map-taps.js, point-selection.js | Separate rendering and hit resolution from public cards, route endpoints and app state.                        |
-| Reusable UI primitives         | selected parts of apps/web/src/interface/interface.js and public/style.css  | Share dock tiles, focus/viewport helpers and tokens; keep public search/routes and editor forms in their apps. |
+| Candidate                      | Existing code                                                                                                       | Boundary                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Object hit testing / selection | apps/web/src/selection/object-selection.js, apps/web/src/map/map-taps.js, apps/web/src/selection/point-selection.js | Separate rendering and hit resolution from public cards, route endpoints and app state.                        |
+| Reusable UI primitives         | selected parts of apps/web/src/interface/interface.js and public/style.css                                          | Share dock tiles, focus/viewport helpers and tokens; keep public search/routes and editor forms in their apps. |
 
 App-level state in app.js is not a library. Do not import app.js into the editor or fork its DOM/handlers. Routing, live
 transport, public service worker updates and offline-download controls remain public-app features until the editor has a

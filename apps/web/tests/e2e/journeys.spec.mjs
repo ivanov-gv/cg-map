@@ -11,7 +11,7 @@ import {
   expectToHold
 } from './helpers.mjs';
 
-// A little over the delay in src/map-taps.js, which is both the wait for a second tap and the block after a camera move.
+// A little over the delay in src/map/map-taps.js, which is both the wait for a second tap and the block after a camera move.
 const TAP_BLOCK_AFTER_MOVE_MILLISECONDS = 550;
 const TAP_ACTION_WINDOW_MILLISECONDS = 650;
 const TAP_THEN_DRAG_GAP_MILLISECONDS = 60;

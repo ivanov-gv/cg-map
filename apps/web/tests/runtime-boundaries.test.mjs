@@ -46,7 +46,7 @@ test('web boundaries fail when a reviewed module moves without its rule', testCo
   fs.renameSync(path.join(fixture.source, 'shared/core.js'), path.join(fixture.source, 'x/core.js'));
   assert.throws(
     () => assertRuntimeBoundaries(fixture.source),
-    /shared\/core\.js: reviewed module missing from src\. Move its rule into the per-folder rules of #456\./
+    /shared\/core\.js: reviewed module missing from src\. Move its rule into this file's per-folder rules\./
   );
 });
 
