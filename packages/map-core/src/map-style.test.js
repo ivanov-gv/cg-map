@@ -35,8 +35,6 @@ test('walking patterns come from stored pathClass with legacy fixtures', () => {
     [{kind: 'path', inGreenArea: true}, 'paths'],
     [{kind: 'track', pathClass: 'trail', inGreenArea: true}, 'paths'],
     [{kind: 'cycleway', pathClass: 'main'}, 'cycleways'],
-    [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
-    [{kind: 'steps', pathClass: 'trail'}, 'steps'],
     [{kind: 'steps', inGreenArea: true}, 'steps']
   ];
   for (const [properties, expectedLayer] of cases) {

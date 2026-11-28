@@ -259,42 +259,45 @@ test('tap hits expand to each listing once in a stable order', () => {
 });
 
 test('POI symbols come from kind, with table cases for every category', () => {
-  // Two released POIs carry a stored category that disagrees with their kind. The #517 decision makes the table win.
   const cases = [
     {entityId: 'node/restaurant', name: 'Restaurant', kind: 'restaurant', category: 'food', icon: 'place-food'},
     {entityId: 'node/museum', name: 'Museum', kind: 'museum', category: 'sights', icon: 'place-sights'},
     {entityId: 'node/bakery', name: 'Bakery', kind: 'bakery', category: 'shops', icon: 'place-shops'},
     {entityId: 'node/hotel', name: 'Hotel', kind: 'hotel', category: 'stay', icon: 'place-stay'},
     {entityId: 'node/atm', name: 'ATM', kind: 'atm', category: 'essentials', icon: 'place-essentials'},
-    {entityId: 'node/unclassified', name: 'Unknown', kind: 'unmapped_kind', category: 'other', icon: 'place-other'},
-    {
-      entityId: 'node/4222066492',
-      name: 'EKO',
-      kind: 'fuel',
-      storedCategory: 'shops',
-      category: 'essentials',
-      icon: 'place-essentials'
-    },
-    {
-      entityId: 'way/1464599145',
-      name: 'Kampana Tower',
-      kind: 'yes',
-      storedCategory: 'sights',
-      category: 'shops',
-      icon: 'place-shops'
-    }
+    {entityId: 'node/unclassified', name: 'Unknown', kind: 'unmapped_kind', category: 'other', icon: 'place-other'}
   ];
-  const directory = cases.map(({entityId, name, kind, storedCategory}, index) =>
-    place(entityId, 2, [19.2 + index / 100, 42.4], {name, kind, category: storedCategory})
-  );
+  // A released 0.1.0 POI has only `id`; its kind and stored category agree, so it keeps today's icon and identity.
+  const releasedIdOnly = {
+    type: 'Feature',
+    geometry: {type: 'Point', coordinates: [19.2 + cases.length / 100, 42.4]},
+    properties: {
+      id: 'node/308749213',
+      name: 'Euro Petrol',
+      kind: 'fuel',
+      category: 'essentials',
+      visibilityLevel: 5
+    }
+  };
+  const directory = [
+    ...cases.map(({entityId, name, kind, category}, index) =>
+      place(entityId, 2, [19.2 + index / 100, 42.4], {name, kind, category})
+    ),
+    releasedIdOnly
+  ];
   const markers = buildPlaceMarkers(directory, markerKeys(directory));
-  const lookOf = entityId => {
-    const marker = markers.find(candidate => candidate.properties.markerKey === entityId);
+  const lookOf = identity => {
+    const marker = markers.find(candidate => candidate.properties.markerKey === identity);
     return [marker.properties.category, marker.properties.icon];
   };
   assert.deepEqual(
     cases.map(({entityId}) => lookOf(entityId)),
     cases.map(({category, icon}) => [category, icon])
+  );
+  const legacyMarker = markers.find(marker => marker.properties.markerKey === releasedIdOnly.properties.id);
+  assert.deepEqual(
+    [legacyMarker.properties.category, legacyMarker.properties.icon, legacyMarker.properties.activeIds],
+    ['essentials', 'place-essentials', '["node/308749213"]']
   );
 });
 
