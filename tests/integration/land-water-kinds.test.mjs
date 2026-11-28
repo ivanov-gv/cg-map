@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {mapStyle, roadLayerIds} from '../../packages/map-core/src/map-style.js';
-import {selectTappedFeature} from '../../apps/web/src/map-selection.js';
-import {describePoint} from '../../apps/web/src/point-selection.js';
+import {selectTappedFeature} from '../../apps/web/src/selection/map-selection.js';
+import {describePoint} from '../../apps/web/src/selection/point-selection.js';
 import {readContractJSON} from '../contracts-root.mjs';
 import {dataSourcePath} from '../data-root.mjs';
 

@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 import {roadLayerIds} from '../pinned-core.mjs';
-import {matchesStreetName, normalizeSearchText} from '../../src/core.js';
+import {matchesStreetName, normalizeSearchText} from '../../src/shared/core.js';
 import {
   CAMERA_HOLD_MILLISECONDS,
   camera,

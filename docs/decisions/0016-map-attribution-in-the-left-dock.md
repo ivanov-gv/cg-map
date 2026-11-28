@@ -32,7 +32,7 @@ The floating control is disabled by passing `attributionControl: false` in `apps
 `packages/map-core` package is not modified; the option override is sufficient because `createMap` spreads `options`
 last.
 
-The attribution module (`apps/web/src/attribution.js`) reads the attribution strings from the map's style object at
+The attribution module (`apps/web/src/map/attribution.js`) reads the attribution strings from the map's style object at
 runtime via `map.getStyle()`. It collects the `attribution` field from every source that has at least one visible layer,
 deduplicates them, and renders the result into `#map-attribution` after sanitising the HTML. No hard-coded copies of the
 strings exist in the module; if a source's attribution changes in map-core, the display updates automatically.

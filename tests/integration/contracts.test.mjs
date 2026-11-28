@@ -12,7 +12,7 @@ import {
   publishedContractsRoot,
   readContractJSON
 } from '../contracts-root.mjs';
-import {categories} from '../../apps/web/src/core.js';
+import {categories} from '../../apps/web/src/shared/core.js';
 import {parseVisibilityConfig, normalizePlaces, assertPublishedPlaces} from '../../dist/web/map-core/place-visibility.js';
 
 test('web categories agree with the published place contract', () => {
@@ -51,7 +51,7 @@ test('producer and browser agree on separate building numbers and located entran
     buildingMapFeatures,
     entranceFeatures,
     describePoint,
-  } = await import('../../apps/web/src/point-selection.js');
+  } = await import('../../apps/web/src/selection/point-selection.js');
   const fixture = readContractJSON('fixtures/building-entrances.json');
   assert.equal(validateBuildingLabels(fixture.labels, fixture.buildings, {contractsDirectory}), 1);
   const index = buildingAddressIndex(fixture.labels);

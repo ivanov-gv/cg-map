@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildObjectCard, buildPlaceCard, formatCoordinates, openingHourRows} from '../src/place-details.js';
-import {buildingAddressIndex, describePoint, placesInsideFootprint} from '../src/point-selection.js';
+import {buildObjectCard, buildPlaceCard, formatCoordinates, openingHourRows} from '../src/selection/place-details.js';
+import {buildingAddressIndex, describePoint, placesInsideFootprint} from '../src/selection/point-selection.js';
 
 const sectionById = (card, id) => card.sections.find(section => section.id === id);
 const rowByLabel = (section, label) => section.rows.find(row => row.label === label);

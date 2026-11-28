@@ -29,8 +29,8 @@ ePodgorica reports only route and position, so direction is derived in this orde
    adds `bearing` and `heading: "movement"` once a vehicle has moved at least 20 m. Vehicles are matched to the previous
    check by route and nearest plausible position (at most 30 m/s plus 50 m). A vehicle keeps its last direction while it
    stands still. History resets after 60 s without checks.
-2. **Page movement.** apps/web/src/vehicle-direction.js applies the same rules to the checks this page has seen. This is
-   how mock mode (the relay, which has no bearing) gets directions.
+2. **Page movement.** apps/web/src/transport/vehicle-direction.js applies the same rules to the checks this page has
+   seen. This is how mock mode (the relay, which has no bearing) gets directions.
 3. **Route estimate.** A bus not yet seen moving points along the nearest stop-to-stop segment of its route in the
    bundled network snapshot (within 2 km). The patterns cover both directions of the same streets, so this is often
    reversed: about 4 in 10 on a live sample of 92 moving buses (2026-11-01). It is drawn as an outlined teardrop with a
@@ -57,8 +57,8 @@ relay's limits (8 s timeout, 512000-byte body, non-2xx and non-array rejection, 
 plus movement directions. It refuses redirects and logs refresh failures (the first, then at most one per minute with a
 count) and the recovery. `-live-transport=false` disables it (503, no polling). services/transit-relay implements a
 fixed-upstream read-only relay with bounded fetches, duplicate filtering, a brief shared cache, CORS, and explicit
-stale/expiry responses. apps/web/src/transport.js validates and renders the published GeoJSON contract. Source details
-were inspected on 2026-10-18. No login, cookies, access tokens, or private vehicle endpoints are used upstream.
+stale/expiry responses. apps/web/src/transport/transport.js validates and renders the published GeoJSON contract. Source
+details were inspected on 2026-10-18. No login, cookies, access tokens, or private vehicle endpoints are used upstream.
 
 ## Current release status
 

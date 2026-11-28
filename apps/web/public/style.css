@@ -1,5 +1,5 @@
 /*
- * Device classes: the JavaScript definition lives in src/device-class.js.
+ * Device classes: the JavaScript definition lives in src/shared/device-class.js.
  * The @media conditions below must match the exported query strings exactly.
  *
  * Flip: max-width 400px AND max-height 400px (small cover screens, nearly square).
@@ -15,7 +15,7 @@
   color: #243f37;
   background: #f8f9f3;
   --green: #193f36;
-  /* CSS mirror of SEARCH_HIGHLIGHT_COLOR in src/core.js; MapLibre paint reads that constant directly. */
+  /* CSS mirror of SEARCH_HIGHLIGHT_COLOR in src/shared/core.js; MapLibre paint reads that constant directly. */
   --search-highlight: #2e7d32;
   --muted: #7c8379;
   --line: #e3e6dc;

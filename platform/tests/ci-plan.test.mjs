@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {FOLDERS, PROJECT_PIPELINES, classify, discoveredLintConfigs, formatOutputs, formatSummary, planChanges, imageMatrix} from '../tools/ci-plan.mjs';
+import {FOLDERS, PROJECT_PIPELINES, classify, discoveredLintConfigs, formatOutputs, formatSummary, planChanges, imageMatrix, resolveBaseRef} from '../tools/ci-plan.mjs';
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
@@ -19,7 +19,8 @@ const OUTPUT_NAMES = [
   'ci_test_runs',
   'cd_test_runs',
   'prove_cd_test_runs',
-  'manual_test_runs'
+  'manual_test_runs',
+  'proofs_determined'
 ];
 
 // A scratch checkout lets the discovery test own its config set. Adding a real app config must not change this file.
@@ -87,7 +88,7 @@ const cases = [
     ['packages/contracts/places.schema.json'],
     ['platform', 'contracts', 'data', 'tests']
   ],
-  ['web source', ['apps/web/src/interface.js'], WEB],
+  ['web source', ['apps/web/src/interface/interface.js'], WEB],
   ['web browser job count', ['apps/web/browser-jobs.json'], WEB],
   ['web Makefile', ['apps/web/Makefile'], WEB],
   ['web package', ['apps/web/package.json'], WEB],
@@ -136,7 +137,7 @@ const cases = [
   ['browser test helpers', ['apps/web/tests/e2e/helpers.mjs'], WEB],
   ['web build tool', ['apps/web/tools/build.mjs'], WEB],
   ['new unmapped web source', ['apps/web/src/brand-new.js'], WEB],
-  ['web unit test', ['apps/web/tests/core.test.mjs'], WEB],
+  ['web unit test', ['apps/web/src/shared/core.test.js'], WEB],
   ['Markdown in the public web folder', ['apps/web/public/notes.md'], WEB],
   ['platform tooling', ['platform/tools/check-repo.mjs'], ['platform']],
   ['workflow', ['.github/workflows/web.yml'], ['workflows', 'platform']],
@@ -324,21 +325,22 @@ test('the retired root lint config selects only platform tooling', () => {
 });
 
 test('outputs give every folder a value and the selected test runs', () => {
-  const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
+  const changedFiles = ['apps/web/src/interface/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 6);
+  assert.equal(lines.length, FOLDERS.length + 7);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
   assert.ok(lines.includes('prove_cd_test_runs=false'));
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
+  assert.ok(lines.includes('proofs_determined=true'));
   assert.deepEqual(lines.slice(FOLDERS.length).map(line => line.split('=')[0]), OUTPUT_NAMES);
 });
 
 test('a changed folder workflow runs in place, while other changed workflows keep a separate test call', () => {
   const changedFiles = [
-    'apps/web/src/interface.js',
+    'apps/web/src/interface/interface.js',
     'docs/README.md',
     '.github/workflows/ci-apps-web.yml',
     '.github/workflows/ci-apps-editor.yml',
@@ -353,7 +355,7 @@ test('a changed folder workflow runs in place, while other changed workflows kee
 
 test('a web workflow change needs no planner matrix for its in-place call', () => {
   const workflow = 'ci-apps-web.yml';
-  const source = 'apps/web/tests/offline.test.mjs';
+  const source = 'apps/web/src/offline/offline.test.js';
   const changedFiles = [`.github/workflows/${workflow}`, source];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
   assert.ok(lines.includes(`ci_in_place_test_runs=["${workflow}"]`), 'the web call is not in place');
@@ -384,7 +386,8 @@ test('summary splits CI test-run calls and shows the CD proof flag', () => {
       '- CI test runs in place: ci-workflows.yml',
       '- CD proof flag: true',
       '- CD test-run dispatches: none',
-      '- Manual test runs: none'
+      '- Manual test runs: none',
+      '- Workflow proofs determined: true'
     ].join('\n')
   );
 
@@ -443,7 +446,7 @@ test('the browser image has its own pipeline, and a change to it selects no appl
 
 test('a merge publishes the image of each app it selected, and no other', () => {
   const appsFor = file => imageMatrix(planChanges([file]).folders).include.map(({app}) => app);
-  assert.deepEqual(appsFor('apps/web/src/interface.js'), ['web']);
+  assert.deepEqual(appsFor('apps/web/src/interface/interface.js'), ['web']);
   assert.deepEqual(appsFor('apps/editor/src/sw.js'), ['editor']);
   assert.deepEqual(appsFor('packages/map-core/src/map.js'), ['core-demo'], 'only core-demo runs unreleased core');
   assert.deepEqual(appsFor('packages/contracts/place-visibility.json'), [], 'consumers pin a published release');
@@ -527,8 +530,8 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   const deleted = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
   assert.match(deleted, /Folders: transit-relay, tests/);
 
-  fs.mkdirSync(path.join(repo, 'apps/web/src'), {recursive: true});
-  fs.writeFileSync(path.join(repo, 'apps/web/src/interface.js'), 'export const ui = true;\n');
+  fs.mkdirSync(path.join(repo, 'apps/web/src/interface'), {recursive: true});
+  fs.writeFileSync(path.join(repo, 'apps/web/src/interface/interface.js'), 'export const ui = true;\n');
   git('add', '.');
   git('commit', '-qm', 'web');
   const narrowed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
@@ -555,4 +558,209 @@ test('outputs: an empty CD selection is the exact [] the dispatcher compares', (
   assert.ok(lines.includes('cd_test_runs=[]'));
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
+});
+
+test('a PR plans only its own changes against the current base branch, even when the tracking ref is stale', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-pr-head-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const origin = path.join(root, 'origin');
+  const local = path.join(root, 'local');
+  const git = (cwd, ...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd,
+      encoding: 'utf8'
+    });
+
+  git(root, 'init', '-q', '-b', 'main', origin);
+  fs.mkdirSync(path.join(origin, 'docs'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'docs/readme.md'), 'base\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'base');
+
+  git(root, 'clone', '-q', origin, local);
+  git(local, 'checkout', '-qb', 'pr');
+  fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'pr docs change');
+
+  // Advance the remote base branch but leave the local tracking ref stale.
+  git(origin, 'checkout', '-q', 'main');
+  fs.mkdirSync(path.join(origin, 'services/backend/cmd/server'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'services/backend/cmd/server/main.go'), 'package main\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'main adds backend work');
+  const currentMain = git(origin, 'rev-parse', 'HEAD').trim();
+  const staleTracking = git(local, 'rev-parse', 'refs/remotes/origin/main').trim();
+  git(local, 'fetch', '-q', 'origin', 'refs/heads/main:refs/tmp/main');
+  git(local, 'update-ref', 'refs/remotes/origin/main', staleTracking);
+  // A local tag named origin/main must not shadow the fetched base branch.
+  git(local, 'tag', 'origin/main', staleTracking);
+  assert.notEqual(git(local, 'rev-parse', 'refs/remotes/origin/main').trim(), currentMain);
+
+  // Merging main into the PR makes the PR head contain main's own change.
+  git(local, 'merge', '-qm', 'merge main', 'refs/tmp/main');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
+    cwd: local,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+  assert.match(plan, /^Selected a subset of pipelines\.$/m, plan);
+  assert.match(plan, /^- Folders: docs$/m, plan);
+  assert.doesNotMatch(plan, /\bbackend\b/, plan);
+});
+
+test('PR planning uses the provided head when checkout HEAD differs from the PR head', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-pr-head-diff-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const origin = path.join(root, 'origin');
+  const local = path.join(root, 'local');
+  const git = (cwd, ...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd,
+      encoding: 'utf8'
+    });
+
+  git(root, 'init', '-q', '-b', 'main', origin);
+  fs.mkdirSync(path.join(origin, 'docs'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'docs/readme.md'), 'base\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'base');
+  git(root, 'clone', '-q', origin, local);
+
+  git(local, 'checkout', '-qb', 'pr');
+  fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'pr docs change');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
+  // Make checkout HEAD different from the PR head.
+  git(local, 'checkout', '-q', 'main');
+  fs.mkdirSync(path.join(local, 'services/backend/cmd/server'), {recursive: true});
+  fs.writeFileSync(path.join(local, 'services/backend/cmd/server/main.go'), 'package main\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'local checkout change');
+  assert.notEqual(git(local, 'rev-parse', 'HEAD').trim(), prHead);
+
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
+    cwd: local,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+  assert.match(plan, /^Selected a subset of pipelines\.$/m, plan);
+  assert.match(plan, /^- Folders: docs$/m, plan);
+  assert.doesNotMatch(plan, /\bbackend\b/, plan);
+});
+
+test('a base ref that cannot be resolved selects everything with a reason and unknown proofs', t => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-bad-ref-'));
+  t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
+  const git = (...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd: repo,
+      encoding: 'utf8'
+    });
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  git('init', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(repo, 'readme.md'), 'base\n');
+  git('add', '.');
+  git('commit', '-qm', 'base');
+  const output = path.join(repo, 'output.txt');
+
+  const result = execFileSync('node', [planner, '--base-ref', 'missing-branch'], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {...plannerEnv, GITHUB_OUTPUT: output}
+  });
+  assert.match(result, /Selected everything \(base ref failed\)\./, result);
+  assert.match(result, /- Workflow proofs determined: false/m, result);
+  assert.match(fs.readFileSync(output, 'utf8'), /^proofs_determined=false$/m);
+});
+
+test('an invalid base ref is rejected before git and selects everything with a visible reason', t => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-invalid-ref-'));
+  t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
+  const git = (...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd: repo,
+      encoding: 'utf8'
+    });
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  git('init', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(repo, 'readme.md'), 'base\n');
+  git('add', '.');
+  git('commit', '-qm', 'base');
+
+  for (const baseRef of [
+    '--upload-pack=evil',
+    '../evil',
+    'main..other',
+    'name with space',
+    'a//b',
+    'trailing/',
+    'bad.lock',
+    'bad@{1}',
+    'bad\u0001ctrl'
+  ]) {
+    assert.throws(() => resolveBaseRef(baseRef, 'HEAD', {cwd: repo}), /invalid base ref/, baseRef);
+    const result = execFileSync('node', [planner, '--base-ref', baseRef], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: plannerEnv
+    });
+    assert.match(result, /Selected everything \(base ref failed\)\./, `${baseRef}: ${result}`);
+    assert.match(result, /invalid base ref/, `${baseRef}: ${result}`);
+    assert.match(result, /- Workflow proofs determined: false/m, `${baseRef}: ${result}`);
+  }
+});
+
+test('a tag with the same name as the base branch does not shadow the fetched branch', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-tag-shadow-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const origin = path.join(root, 'origin');
+  const local = path.join(root, 'local');
+  const git = (cwd, ...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd,
+      encoding: 'utf8'
+    });
+
+  git(root, 'init', '-q', '-b', 'main', origin);
+  fs.mkdirSync(path.join(origin, 'docs'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'docs/readme.md'), 'base\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'base');
+
+  git(root, 'clone', '-q', origin, local);
+  git(local, 'checkout', '-qb', 'pr');
+  fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'pr docs change');
+
+  // Advance main on origin, then create a tag named "main" at the old base commit.
+  git(origin, 'checkout', '-q', 'main');
+  fs.mkdirSync(path.join(origin, 'services/backend/cmd/server'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'services/backend/cmd/server/main.go'), 'package main\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'main advances backend');
+  const oldBase = git(origin, 'rev-parse', 'HEAD~1').trim();
+  git(origin, 'tag', 'main', oldBase);
+
+  // Merge the advanced main into the PR so the branch and tag would produce different selections.
+  git(local, 'fetch', '-q', 'origin', 'refs/heads/main:refs/tmp/main');
+  git(local, 'merge', '-qm', 'merge main', 'refs/tmp/main');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
+    cwd: local,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+  assert.match(plan, /^Selected a subset of pipelines\.$/m, plan);
+  assert.match(plan, /^- Folders: docs$/m, plan);
+  assert.doesNotMatch(plan, /\bbackend\b/, plan);
 });

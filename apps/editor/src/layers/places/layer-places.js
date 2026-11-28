@@ -68,7 +68,7 @@ const buildingName = ({feature}) => addressText(feature.properties) || feature.p
 const canBelongToBuilding = context => Boolean(context.rules.layers[placesFile].properties.buildingEntityId);
 
 // A new or moved place says what it is in; one left where it was keeps what it says.
-function placedFeature(feature, context, {isNew, key}) {
+export function placedFeature(feature, context, {isNew, key}) {
   if (!canBelongToBuilding(context) || !feature.geometry) return feature;
   const before = context.session.workingFeature(placesFile, key);
   const isMoved = JSON.stringify(before?.geometry) !== JSON.stringify(feature.geometry);

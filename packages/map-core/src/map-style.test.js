@@ -33,16 +33,6 @@ test('each walking path class lands in exactly one walking layer', () => {
   assert.deepEqual(walkingLayersFor({kind: 'pedestrian', pathClass: 'trail'}), [], 'a pedestrian street stays a street');
 });
 
-test('roadLayerIds names the published road layers without adding others', () => {
-  const style = mapStyle('pmtiles://archive', 'https://local.test/');
-  const roadLineIds = style.layers
-    .filter(layer => layer.type === 'line' && layer['source-layer'] === 'roads')
-    .map(layer => layer.id);
-  assert.deepEqual(roadLayerIds(['steps', 'major-roads']), ['steps', 'major-roads']);
-  assert.deepEqual(roadLayerIds(roadLineIds), roadLineIds);
-  assert.throws(() => roadLayerIds(['road-labels']), /Unknown road layer: road-labels/);
-});
-
 for (const prefix of ['/', '/cg-map/']) {
   test(`cartography injects local assets at ${prefix}`, () => {
     const baseURL = `https://local.test${prefix}`;
@@ -108,29 +98,96 @@ test('one bridge outline draws a grey deck fill with a dark edge from the bridge
   assert.ok(edge.paint['line-width'] > 0);
 });
 
-test('bridge decks sit above ground and water but below every road', () => {
+test('bridge decks sit above ground roads and water but below roads on bridges', () => {
   const style = mapStyle('pmtiles://archive', 'https://local.test/');
   const positionOf = id => style.layers.findIndex(layer => layer.id === id);
   const deck = positionOf('bridge-decks');
   const edge = positionOf('bridge-deck-edges');
   const belowDeck = ['land', 'canyon-rims', 'water', 'buildings'].map(positionOf);
-  const roads = [
+  const groundRoadIds = [
     'road-casing', 'minor-casing', 'minor-roads', 'pedestrian-streets', 'major-roads',
     'paths', 'footways', 'park-routes', 'cycleways', 'steps'
-  ].map(positionOf);
+  ];
+  const groundRoads = groundRoadIds.map(positionOf);
+  const raisedRoads = groundRoadIds.map(id => positionOf(`${id}-on-bridge`));
   assert.ok(deck >= 0 && edge > deck, `deck ${deck}, edge ${edge}`);
   for (const index of belowDeck) assert.ok(index >= 0 && index < deck, `layer ${index} is not below the deck`);
-  for (const index of roads) assert.ok(index > edge, `road ${index} is not above the deck`);
-  assert.ok(drawingGroups.indexOf('bridges') < drawingGroups.indexOf('streets'));
+  for (const index of groundRoads) assert.ok(index >= 0 && index < deck, `ground road ${index} is not below the deck`);
+  for (const index of raisedRoads) assert.ok(index > edge, `road on a bridge ${index} is not above the deck`);
+  assert.ok(drawingGroups.indexOf('stairways') < drawingGroups.indexOf('bridges'));
+  assert.ok(drawingGroups.indexOf('bridges') < drawingGroups.indexOf('bridge-streets'));
 });
 
-test('bridge drawing uses outlines instead of bridge-tagged roads', () => {
+test('roadLayerIds returns ground and on-bridge layers for the requested road kinds', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const publishedIds = new Set(style.layers.map(layer => layer.id));
+  const roadLineIds = style.layers
+    .filter(layer => layer.type === 'line' && layer['source-layer'] === 'roads')
+    .map(layer => layer.id);
+  const groundIds = roadLineIds.filter(id => !id.endsWith('-on-bridge'));
+  assert.deepEqual(roadLayerIds(['steps', 'major-roads']), [
+    'steps', 'steps-on-bridge', 'major-roads', 'major-roads-on-bridge'
+  ]);
+  assert.deepEqual([...roadLayerIds(groundIds)].sort(), [...roadLineIds].sort());
+  for (const id of roadLayerIds(groundIds)) assert.ok(publishedIds.has(id), `${id} is not published`);
+  assert.throws(() => roadLayerIds(['road-labels']), /Unknown road layer: road-labels/);
+  assert.throws(() => roadLayerIds(['steps-on-bridge']), /Unknown road layer: steps-on-bridge/);
+});
+
+test('a road is placed by its own bridge tag or layer, never by a crossing deck', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const roadLayers = style.layers.filter(layer => layer.type === 'line' && layer['source-layer'] === 'roads');
+  const positionOf = id => style.layers.findIndex(layer => layer.id === id);
+  const deck = positionOf('bridge-decks');
+  const edge = positionOf('bridge-deck-edges');
+  const matchingLayers = properties => roadLayers
+    .filter(layer => featureFilter(layer.filter).filter({zoom: 16}, {type: 2, properties}))
+    .map(layer => layer.id);
+  const groundRoad = matchingLayers({kind: 'primary'});
+  assert.ok(groundRoad.length > 0, 'a ground road needs a road layer');
+  assert.ok(
+    groundRoad.every(id => positionOf(id) < deck),
+    `ground roads must stay below the deck: ${groundRoad.join(', ')}`
+  );
+  for (const properties of [
+    {kind: 'primary', bridge: 'yes'},
+    {kind: 'primary', bridge: 'viaduct'},
+    {kind: 'primary', layer: '1'},
+    {kind: 'primary', layer: 2},
+    {kind: 'footway', bridge: 'yes', pathClass: 'trail'}
+  ]) {
+    const onBridge = matchingLayers(properties);
+    assert.ok(onBridge.length > 0, `${JSON.stringify(properties)} has no road layer`);
+    assert.ok(
+      onBridge.every(id => id.endsWith('-on-bridge') && positionOf(id) > edge),
+      `${JSON.stringify(properties)} is not above the deck: ${onBridge.join(', ')}`
+    );
+  }
+  for (const properties of [
+    {kind: 'primary', bridge: 'no'},
+    {kind: 'primary', bridge: 'yes', layer: '-1'},
+    {kind: 'primary', layer: '-1', tunnel: 'yes'},
+    {kind: 'primary', tunnel: 'yes', layer: '1'},
+    {kind: 'primary', tunnel: 'yes', bridge: 'yes', layer: 2}
+  ]) {
+    const below = matchingLayers(properties);
+    assert.ok(below.length > 0, `${JSON.stringify(properties)} has no road layer`);
+    assert.ok(
+      below.every(id => positionOf(id) < deck),
+      `${JSON.stringify(properties)} must stay below the deck: ${below.join(', ')}`
+    );
+  }
+});
+
+test('bridge drawing uses outlines instead of bridge-tagged road strokes', () => {
   const style = mapStyle('pmtiles://archive', 'https://local.test/');
   const bridgeGroup = style.layers
     .filter(layer => layer.metadata?.[drawingGroupKey] === 'bridges')
     .map(layer => layer.id);
+  const deckLayers = style.layers.filter(layer => layer['source-layer'] === 'bridges');
   assert.deepEqual(bridgeGroup, ['bridge-decks', 'bridge-deck-edges']);
-  for (const layer of style.layers) {
+  assert.deepEqual(deckLayers.map(layer => layer.id), ['bridge-decks', 'bridge-deck-edges']);
+  for (const layer of deckLayers) {
     assert.ok(!JSON.stringify(layer.filter ?? []).includes('"bridge"'), `${layer.id} still selects bridge roads`);
   }
 });
@@ -189,19 +246,34 @@ test('rail ties are lighter dashes over a widening casing, and disused track is 
   assert.equal(layers['platform-areas'].paint['fill-color'], basemapColors.railwayPlatform);
 });
 
-test('railways sit above land and bridge decks but below roads', () => {
+test('railways stay below ground roads but above land', () => {
   const style = mapStyle('pmtiles://archive', 'https://local.test/');
   const positionOf = id => style.layers.findIndex(layer => layer.id === id);
   const trackPositions = railwayTrackLayerIds.map(positionOf);
   const labelPositions = railwayLabelLayerIds.map(positionOf);
-  const below = ['land', 'meadows', 'bridge-decks', 'bridge-deck-edges'].map(positionOf);
-  const above = ['road-casing', 'minor-casing', 'minor-roads', 'major-roads', 'steps'].map(positionOf);
-  assert.ok([...trackPositions, ...labelPositions].every(position => position >= 0));
-  assert.ok(Math.max(...below) < Math.min(...trackPositions), 'railways must cover land and bridge decks');
-  assert.ok(Math.max(...trackPositions) < Math.min(...above), 'roads must cover railways');
-  assert.ok(Math.max(...above) < Math.min(...labelPositions), 'station names stay above roads');
-  assert.ok(drawingGroups.indexOf('meadows') < drawingGroups.indexOf('railways'));
+  const landPositions = ['land', 'meadows'].map(positionOf);
+  const groundRoadPositions = [
+    'road-casing', 'minor-casing', 'minor-roads', 'major-roads', 'steps'
+  ].map(positionOf);
+  const raisedRoadPositions = [
+    'road-casing-on-bridge', 'minor-casing-on-bridge', 'minor-roads-on-bridge',
+    'major-roads-on-bridge', 'steps-on-bridge'
+  ].map(positionOf);
+  const positions = [
+    ...landPositions, ...trackPositions, ...groundRoadPositions, ...raisedRoadPositions, ...labelPositions
+  ];
+  assert.ok(positions.every(position => position >= 0), 'a layer in the drawing chain is missing');
+  assert.ok(Math.max(...landPositions) < Math.min(...trackPositions), 'tracks must cover land');
+  assert.ok(Math.max(...trackPositions) < Math.min(...groundRoadPositions), 'ground roads must cover tracks');
+  assert.ok(Math.max(...raisedRoadPositions) < Math.min(...labelPositions), 'station names stay above roads');
   assert.ok(drawingGroups.indexOf('railways') < drawingGroups.indexOf('streets'));
+  assert.ok(drawingGroups.indexOf('bridge-stairways') < drawingGroups.indexOf('labels'));
+  assert.ok(
+    style.layers
+      .filter(layer => layer['source-layer'] === 'railways')
+      .every(layer => !layer.id.endsWith('-on-bridge')),
+    'railway tiles carry no bridge tag to raise a track'
+  );
   for (const id of railwayLabelLayerIds) {
     assert.equal(style.layers.find(layer => layer.id === id).metadata[drawingGroupKey], 'labels');
   }

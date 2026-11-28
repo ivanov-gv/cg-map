@@ -22,13 +22,13 @@ import {
   uncoveredMapArea,
   uncoveredMapOffset,
   viewForDeviceClass
-} from '../src/interface.js';
+} from '../src/interface/interface.js';
 import {
   DESKTOP_MEDIA_QUERY,
   deviceClass,
   FLIP_MEDIA_QUERY,
   MOBILE_MEDIA_QUERY
-} from '../src/device-class.js';
+} from '../src/shared/device-class.js';
 
 test('search bar state follows the query and whether results are open', () => {
   assert.equal(searchBarState({hasQuery: false, resultsVisible: false}), 'empty');

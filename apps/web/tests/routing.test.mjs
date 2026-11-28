@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {roadURL, parseRoadRoute, RoadRouter} from '../src/routing.js';
-import {planTransit} from '../src/transit-routing.js';
+import {roadURL, parseRoadRoute, RoadRouter} from '../src/routing/routing.js';
+import {planTransit} from '../src/routing/transit-routing.js';
 export const network = {
   version: 1,
   retrievedAt: '2026-10-18T19:00:00Z',

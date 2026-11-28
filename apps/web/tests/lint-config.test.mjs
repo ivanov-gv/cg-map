@@ -29,7 +29,14 @@ test('Web owns a config that its lint command reads', async () => {
 
   const results = await eslint.lintFiles(firstCommand.split(' ').slice(1));
   const linted = new Set(results.map(result => path.relative(appRoot, result.filePath).split(path.sep).join('/')));
-  const required = ['eslint.config.mjs', 'playwright.config.mjs', 'src/app.js', 'src/sw.js', 'tools/build.mjs', 'tests/core.test.mjs'];
+  const required = [
+    'eslint.config.mjs',
+    'playwright.config.mjs',
+    'src/app.js',
+    'src/sw.js',
+    'tools/build.mjs',
+    'src/shared/core.test.js'
+  ];
   for (const filePath of required) assert.ok(linted.has(filePath), `${filePath} is not linted by npm run lint`);
 });
 
@@ -52,7 +59,12 @@ test('nested runtime files keep import and readability restrictions', async () =
 
 test('pure modules still reject browser, storage and network globals', async () => {
   const code = 'export const width = window.innerWidth;\n';
-  for (const filePath of ['src/core.js', 'src/data-mode.js', 'src/status-messages.js', 'src/vehicle-direction.js']) {
+  for (const filePath of [
+    'src/shared/core.js',
+    'src/transport/data-mode.js',
+    'src/shared/status-messages.js',
+    'src/transport/vehicle-direction.js'
+  ]) {
     assert.ok((await ruleIdsAt(filePath, code)).includes('no-restricted-globals'), filePath);
   }
 });
