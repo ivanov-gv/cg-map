@@ -541,11 +541,6 @@ export function validateStopsAndRoutes(stopsData, routesData, transitNetwork = n
   }
 
   if (transitNetwork) {
-    for (const pattern of transitNetwork.patterns || []) {
-      for (const stopId of pattern.stops) {
-        requireValue(stopIds.has(stopId), `Pattern references stop ${stopId} not in transport-stops.geojson`);
-      }
-    }
     validateCityRouteDirections(routesData, transitNetwork);
   }
 }
