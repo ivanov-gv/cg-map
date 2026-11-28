@@ -14,14 +14,15 @@ export const drawingGroups = [
   'buildings',
   'meadows',
   'contour-lines',
+  // The tile contract carries no bridge or layer tag for railways, so tracks keep their one ground level. Ground
+  // roads stay above them, as they did before the bridge split.
+  'railways',
   // Ground and lower roads come before decks so a road passing under a bridge cannot cover its deck.
   'streets',
   'trails',
   'main-routes',
   'stairways',
   'bridges',
-  // Tracks still cover land use and decks. Roads on bridges stay above tracks; ground roads now pass below them.
-  'railways',
   'bridge-streets',
   'bridge-trails',
   'bridge-main-routes',

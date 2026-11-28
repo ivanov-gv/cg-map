@@ -34,13 +34,20 @@ const majorRoadFilter = roadKindFilter(majorRoadKinds);
 // Ways that are not carriageways get their own pattern; one generic minor-road stroke hides the walking network.
 const nonStreetFilter = roadKindFilter(['footway', 'pedestrian', 'path', 'track', 'cycleway', 'steps']);
 const streetFilter = ['all', ['!', majorRoadFilter], ['!', nonStreetFilter]];
-// A road's own tags decide its level: a tunnel always stays below decks; otherwise any bridge kind or positive
-// `layer` puts it above them. `layer` arrives as an integer or its string form; the style has no tunnel-specific
-// drawing, so a tunnel gets the same look as its road kind.
+// A road's own tags decide its level: a tunnel and a negative `layer` always stay below decks; otherwise any bridge
+// kind or positive `layer` puts it above them. `layer` arrives as an integer or its string form; the style has no
+// tunnel-specific drawing, so a tunnel gets the same look as its road kind.
+const roadLayerLevel = ['to-number', ['get', 'layer'], 0];
 const hasBridgeTag = ['all', ['has', 'bridge'], ['!=', ['get', 'bridge'], 'no']];
-const isAboveGround = ['>', ['to-number', ['get', 'layer'], 0], 0];
+const hasNegativeLayer = ['<', roadLayerLevel, 0];
+const isAboveGround = ['>', roadLayerLevel, 0];
 const isTunnel = ['all', ['has', 'tunnel'], ['!=', ['get', 'tunnel'], 'no']];
-const isRoadOnBridge = ['all', ['!', isTunnel], ['any', hasBridgeTag, isAboveGround]];
+const isRoadOnBridge = [
+  'all',
+  ['!', isTunnel],
+  ['!', hasNegativeLayer],
+  ['any', hasBridgeTag, isAboveGround]
+];
 const isRoadUnderDeck = ['!', isRoadOnBridge];
 
 function withRoadLevel(filter, roadLevel) {
@@ -445,9 +452,9 @@ export function mapStyle(basemapURL, assetBaseURL) {
       ...buildingLayers(),
       ...meadowLayers(),
       ...contourLayers(),
+      ...railwayLayers(),
       ...roads.groundRoads,
       ...bridgeLayers(),
-      ...railwayLayers(),
       ...roads.raisedRoads,
       ...contourLabelLayers(),
       ...labelLayers(),

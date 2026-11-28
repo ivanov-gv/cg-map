@@ -14,8 +14,12 @@ service worker, editor modes or writes. See [architecture](../../docs/system-arc
 [UI 3.Core](https://github.com/ivanov-gv/cg-map/wiki/UI---3.Core) and the Penpot card "7 · Map primitives (Core)".
 [src/basemap-palette.js](src/basemap-palette.js) holds one colour token per primitive part.
 [src/drawing-order.js](src/drawing-order.js) lists the drawing groups bottom to top; every basemap layer records its
-group in `metadata`, and a unit test fails when a layer is out of order. Applications install points of interest after
-the style; both apps place them below street labels today.
+group in `metadata`, and a unit test fails when a layer is out of order. The final order is `land` → `shaded-slopes` →
+`sunlit-slopes` → `canyon-walls` → `canyon-rims` → `water` → `buildings` → `meadows` → `contour-lines` → `railways` →
+`streets` → `trails` → `main-routes` → `stairways` → `bridges` → `bridge-streets` → `bridge-trails` →
+`bridge-main-routes` → `bridge-stairways` → `labels` → `points-of-interest`. Ground roads stay above railways and below
+decks; roads on bridges stay above decks. Applications install points of interest after the style; both apps place them
+below street labels today.
 
 Canyon walls are nested bands offset from each canyon rim toward the water, using the relief rule that rims run with the
 river on their right. A painted `width` is ground metres at one constant scale, 1.1393 px/m at zoom 16, doubling at each
@@ -23,19 +27,21 @@ zoom. An empty or zero width draws as 10 px at zoom 16 with the same doubling, b
 wall at low zoom; a painted width narrower than that no-width edge draws as the no-width edge. Their colour goes from
 lightest at the rim to darkest at the foot, using the full depth range at 9 m or more, a shorter lighter range below,
 and the full range when `height` is absent. Each outline in the `bridges` tile layer draws one grey deck for that
-crossing, with a dark line on its edge. Decks sit above water, canyon, ground and roads at or below ground level,
-including roads passing under the bridge. Only roads whose own `bridge` tag or positive `layer` puts them on a bridge
-are drawn above the deck. Tunnels stay below decks even with a positive `layer`, and negative layers stay with ground
-roads; the style has no tunnel-specific drawing. Each road kind has a ground layer and a matching `-on-bridge` layer
-above the decks. An application that hit-tests roads by layer id must pass its base line-layer ids to
-`roadLayerIds([...])`, which returns each id and its `-on-bridge` copy; a hardcoded list misses roads on bridges. Label
-layers and already-suffixed ids fail with `Unknown road layer` rather than being added twice.
+crossing, with a dark line on its edge. Decks sit above water, canyon, railways, ground and roads at or below ground
+level, including roads passing under the bridge. Only roads whose own `bridge` tag or positive `layer` puts them on a
+bridge are drawn above the deck. Tunnels stay below decks even with a positive `layer`, and a negative `layer` keeps a
+bridge-tagged road with ground roads; the style has no tunnel-specific drawing. Each road kind has a ground layer and a
+matching `-on-bridge` layer above the decks. An application that hit-tests roads by layer id must pass its base
+line-layer ids to `roadLayerIds([...])`, which returns each id and its `-on-bridge` copy; a hardcoded list misses roads
+on bridges. Label layers and already-suffixed ids fail with `Unknown road layer` rather than being added twice.
 
 The `railways` tile layer draws platforms as light fills or narrow strokes, active tracks as a thin, soft grey bed with
 fine dashed ties, and disused tracks as one faint dashed line. Their greys sit near land and minor-road casings, so
 tracks stay quiet against both. Track and platform widths grow with zoom. Stations and halts use a generated rail badge
 and a name label in the labels group, with the same local font as other labels; the style has no sprite, so `createMap`
-installs the badge on demand. Railways sit above land use, bridge decks and ground roads, but below roads on bridges.
+installs the badge on demand. Railways sit above land use but below ground roads, as they did before the bridge split; a
+road crossing a track covers it. The tile layer carries no `bridge` or `layer` field, so the style has no `-on-bridge`
+railway copy and no way to raise a track above a deck. Station names remain in the labels group above roads.
 
 Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
 and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for

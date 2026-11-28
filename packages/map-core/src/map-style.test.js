@@ -165,6 +165,7 @@ test('a road is placed by its own bridge tag or layer, never by a crossing deck'
   }
   for (const properties of [
     {kind: 'primary', bridge: 'no'},
+    {kind: 'primary', bridge: 'yes', layer: '-1'},
     {kind: 'primary', layer: '-1', tunnel: 'yes'},
     {kind: 'primary', tunnel: 'yes', layer: '1'},
     {kind: 'primary', tunnel: 'yes', bridge: 'yes', layer: 2}
@@ -245,26 +246,34 @@ test('rail ties are lighter dashes over a widening casing, and disused track is 
   assert.equal(layers['platform-areas'].paint['fill-color'], basemapColors.railwayPlatform);
 });
 
-test('railways sit above land, decks and ground roads but below roads on bridges', () => {
+test('railways stay below ground roads but above land', () => {
   const style = mapStyle('pmtiles://archive', 'https://local.test/');
   const positionOf = id => style.layers.findIndex(layer => layer.id === id);
   const trackPositions = railwayTrackLayerIds.map(positionOf);
   const labelPositions = railwayLabelLayerIds.map(positionOf);
-  const below = [
-    'land', 'meadows', 'bridge-decks', 'bridge-deck-edges',
+  const landPositions = ['land', 'meadows'].map(positionOf);
+  const groundRoadPositions = [
     'road-casing', 'minor-casing', 'minor-roads', 'major-roads', 'steps'
   ].map(positionOf);
-  const above = [
+  const raisedRoadPositions = [
     'road-casing-on-bridge', 'minor-casing-on-bridge', 'minor-roads-on-bridge',
     'major-roads-on-bridge', 'steps-on-bridge'
   ].map(positionOf);
-  assert.ok([...trackPositions, ...labelPositions].every(position => position >= 0));
-  assert.ok(Math.max(...below) < Math.min(...trackPositions), 'railways must cover land, decks and ground roads');
-  assert.ok(Math.max(...trackPositions) < Math.min(...above), 'roads on bridges must cover railways');
-  assert.ok(Math.max(...above) < Math.min(...labelPositions), 'station names stay above roads');
-  assert.ok(drawingGroups.indexOf('meadows') < drawingGroups.indexOf('railways'));
-  assert.ok(drawingGroups.indexOf('stairways') < drawingGroups.indexOf('railways'));
-  assert.ok(drawingGroups.indexOf('railways') < drawingGroups.indexOf('bridge-stairways'));
+  const positions = [
+    ...landPositions, ...trackPositions, ...groundRoadPositions, ...raisedRoadPositions, ...labelPositions
+  ];
+  assert.ok(positions.every(position => position >= 0), 'a layer in the drawing chain is missing');
+  assert.ok(Math.max(...landPositions) < Math.min(...trackPositions), 'tracks must cover land');
+  assert.ok(Math.max(...trackPositions) < Math.min(...groundRoadPositions), 'ground roads must cover tracks');
+  assert.ok(Math.max(...raisedRoadPositions) < Math.min(...labelPositions), 'station names stay above roads');
+  assert.ok(drawingGroups.indexOf('railways') < drawingGroups.indexOf('streets'));
+  assert.ok(drawingGroups.indexOf('bridge-stairways') < drawingGroups.indexOf('labels'));
+  assert.ok(
+    style.layers
+      .filter(layer => layer['source-layer'] === 'railways')
+      .every(layer => !layer.id.endsWith('-on-bridge')),
+    'railway tiles carry no bridge tag to raise a track'
+  );
   for (const id of railwayLabelLayerIds) {
     assert.equal(style.layers.find(layer => layer.id === id).metadata[drawingGroupKey], 'labels');
   }
