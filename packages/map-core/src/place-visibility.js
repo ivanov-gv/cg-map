@@ -15,8 +15,19 @@ function assertEntityIdentity(feature) {
     throw new Error(`Place ${feature.properties.entityId ?? feature.properties.id ?? 'unknown'}: missing entity identity`);
 }
 
-// Validate the shared level table before any marker is admitted.
-export function parseVisibilityConfig(rawConfig) {
+function assertPolicyDefaults(defaults, label, thresholds) {
+  if (defaults === undefined) return;
+  if (defaults === null || typeof defaults !== 'object' || Array.isArray(defaults))
+    throw new Error(`Place visibility: ${label} defaults must be an object`);
+  for (const [name, level] of Object.entries(defaults)) {
+    if (level === 1 || !thresholds.has(level))
+      throw new Error(`Place visibility: ${label} ${name}: invalid default level ${level}`);
+  }
+}
+
+// Validate the shared level table and any policy defaults before any marker is admitted. The optional policy holds
+// data-owned defaults; a consumer that has not loaded it still gets today's fallback for a POI with no level.
+export function parseVisibilityConfig(rawConfig, policy = {}) {
   if (rawConfig?.version !== 1 || !Array.isArray(rawConfig.levels) || !rawConfig.levels.length)
     throw new Error('Place visibility: unsupported configuration');
   rawConfig.levels.forEach((levelEntry, index) => {
@@ -28,33 +39,55 @@ export function parseVisibilityConfig(rawConfig) {
       throw new Error('Place visibility: levels must be consecutive with increasing zoom');
   });
   const thresholds = new Map(rawConfig.levels.map(levelEntry => [levelEntry.level, levelEntry.minZoom]));
-  // A place with no level must never reach the earliest, individually reviewed level.
+  // Neither the fallback nor a policy default may reach the earliest, individually reviewed level.
   if (!thresholds.has(rawConfig.legacyFallbackLevel) || rawConfig.legacyFallbackLevel === 1)
     throw new Error('Place visibility: invalid fallback level');
+  assertPolicyDefaults(policy?.kinds, 'kind', thresholds);
+  assertPolicyDefaults(policy?.categories, 'category', thresholds);
   return {
     levels: rawConfig.levels.map(levelEntry => levelEntry.level),
     thresholds,
-    fallback: rawConfig.legacyFallbackLevel
+    fallback: rawConfig.legacyFallbackLevel,
+    kindDefaults: policy?.kinds ?? {},
+    categoryDefaults: policy?.categories ?? {}
   };
 }
 
-// A missing level is a legacy input and takes the latest fallback. A present but invalid level fails visibly:
-// it must never silently become high priority.
-export function normalizePlaces(features, config) {
-  return features.map(feature => {
-    assertEntityIdentity(feature);
-    const level =
-      feature.properties.visibilityLevel === undefined ? config.fallback : feature.properties.visibilityLevel;
-    if (!config.thresholds.has(level))
-      throw new Error(`Place ${entityIdOf(feature)}: invalid visibilityLevel ${level}`);
-    return {
-      ...feature,
-      properties: {...feature.properties, visibilityLevel: level}
-    };
-  });
+function checkedVisibilityLevel(feature, source, level, config) {
+  if (!config.thresholds.has(level))
+    throw new Error(`Place ${entityIdOf(feature)}: invalid ${source} ${level}`);
+  return level;
 }
 
-// Producers require explicit reviewed levels; consumers may normalize only missing legacy values.
+// An exact kind rule precedes the category default; the category comes from the kind, not a stored copy.
+function policyDefaultLevel(feature, config) {
+  const {kind} = feature.properties;
+  if (typeof kind === 'string' && kind && Object.hasOwn(config.kindDefaults, kind))
+    return config.kindDefaults[kind];
+  const category = placeCategory(feature.properties);
+  return Object.hasOwn(config.categoryDefaults, category) ? config.categoryDefaults[category] : config.fallback;
+}
+
+// Returns one POI's zoom-band level for the Editor's preview and for normalizePlaces. A present invalid value fails
+// visibly rather than being replaced by a lower-priority default.
+export function placeVisibilityLevel(feature, config) {
+  assertEntityIdentity(feature);
+  const {visibilityOverride, visibilityLevel} = feature.properties;
+  if (visibilityOverride !== undefined)
+    return checkedVisibilityLevel(feature, 'visibilityOverride', visibilityOverride, config);
+  if (visibilityLevel !== undefined)
+    return checkedVisibilityLevel(feature, 'visibilityLevel', visibilityLevel, config);
+  return checkedVisibilityLevel(feature, 'visibility policy default', policyDefaultLevel(feature, config), config);
+}
+
+export function normalizePlaces(features, config) {
+  return features.map(feature => ({
+    ...feature,
+    properties: {...feature.properties, visibilityLevel: placeVisibilityLevel(feature, config)}
+  }));
+}
+
+// Producers require explicit reviewed levels; consumers resolve a missing level from the policy, else the fallback.
 export function assertPublishedPlaces(features, config) {
   for (const feature of features) {
     assertEntityIdentity(feature);

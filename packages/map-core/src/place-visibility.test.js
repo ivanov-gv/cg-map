@@ -5,6 +5,7 @@ import {validateStyleMin} from '@maplibre/maplibre-gl-style-spec';
 import {
   parseVisibilityConfig,
   normalizePlaces,
+  placeVisibilityLevel,
   assertPublishedPlaces,
   compareCodePoints,
   markerKeys,
@@ -19,11 +20,19 @@ const rawConfig = JSON.parse(
   fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json')))
 );
 const config = parseVisibilityConfig(rawConfig);
+// Verbatim policy keys: an exact kind rule, then a category default keyed by the vocabulary in place-category.js.
+const policy = {kinds: {museum: 2, memorial: 5}, categories: {food: 4, sights: 4, stay: 3}};
+const policyConfig = parseVisibilityConfig(rawConfig, policy);
 const place = (entityId, visibilityLevel, coordinates = [19.26, 42.44], extra = {}) => ({
   type: 'Feature',
   geometry: {type: 'Point', coordinates},
   properties: {entityId, name: entityId, kind: 'bakery', visibilityLevel, ...extra}
 });
+const placeWithoutLevel = (entityId, kind, extra = {}) => {
+  const feature = place(entityId, undefined, [19.26, 42.44], {kind, ...extra});
+  delete feature.properties.visibilityLevel;
+  return feature;
+};
 
 test('published levels are consecutive, cumulative, and inclusive at each threshold', () => {
   assert.deepEqual(
@@ -87,6 +96,56 @@ test('a missing level normalizes to the fallback; an invalid one fails visibly',
   for (const bad of [0, 6, 1.5, '2', false, null])
     assert.throws(() => normalizePlaces([place('node/a', bad)], config), /invalid visibilityLevel/);
   assert.throws(() => assertPublishedPlaces([missing], config), /needs a valid/);
+});
+
+test('visibilityOverride wins over a stored level and every default', () => {
+  const feature = place('node/override', 4, [19.26, 42.44], {kind: 'museum', visibilityOverride: 2});
+  assert.equal(placeVisibilityLevel(feature, policyConfig), 2);
+  assert.equal(normalizePlaces([feature], policyConfig)[0].properties.visibilityLevel, 2);
+});
+
+test('a version-3 POI keeps its stored visibilityLevel', () => {
+  // The released snapshot stores `id`, a category and an assigned level. None of the policy defaults may replace it.
+  const feature = place('node/308749213', 5, [19.26, 42.44], {
+    id: 'node/308749213',
+    category: 'sights',
+    kind: 'museum'
+  });
+  delete feature.properties.entityId;
+  assert.equal(placeVisibilityLevel(feature, policyConfig), 5);
+});
+
+test('an exact kind rule wins over its category default', () => {
+  assert.equal(placeVisibilityLevel(placeWithoutLevel('node/memorial', 'memorial'), policyConfig), 5);
+});
+
+test('a kind without its own rule uses its category from the kind vocabulary', () => {
+  // The stored category is deliberately wrong: version 5 drops it, so the resolver asks placeCategory instead.
+  const feature = placeWithoutLevel('node/cafe', 'cafe', {category: 'stay'});
+  assert.equal(placeVisibilityLevel(feature, policyConfig), 4);
+});
+
+test('a kind with no rule or mapped default uses the fallback', () => {
+  const feature = placeWithoutLevel('node/unknown', 'unmapped_kind', {category: 'sights'});
+  assert.equal(placeVisibilityLevel(feature, policyConfig), config.fallback);
+});
+
+test('an invalid override names the POI and the value it came from', () => {
+  const feature = placeWithoutLevel('node/legacy-override', 'museum');
+  delete feature.properties.entityId;
+  feature.properties.id = 'node/legacy-override';
+  feature.properties.visibilityOverride = 6;
+  feature.properties.visibilityLevel = 2;
+  assert.throws(
+    () => placeVisibilityLevel(feature, policyConfig),
+    /Place node\/legacy-override: invalid visibilityOverride 6/
+  );
+});
+
+test('unsupported policy defaults are rejected before any POI is read', () => {
+  assert.throws(() => parseVisibilityConfig(rawConfig, {kinds: []}), /kind defaults must be an object/);
+  assert.throws(() => parseVisibilityConfig(rawConfig, {kinds: {museum: 1}}), /kind museum: invalid default level 1/);
+  assert.throws(() => parseVisibilityConfig(rawConfig, {categories: {food: 9}}), /category food: invalid default level 9/);
 });
 
 test('released POIs use their id until data publishes entityId', () => {
