@@ -8,6 +8,17 @@ inputs:
     description: 'Base ref for diff comparison (default: origin/main).'
     required: false
     default: 'origin/main'
+  base_ref:
+    description: >-
+      Base branch name for a pull request. When set, the planner fetches refs/heads/<base_ref>
+      into a dedicated ref and diffs against its merge base with head, so merging the base branch
+      into the PR does not add the base branch's own changes to the plan.
+    required: false
+    default: ''
+  head:
+    description: 'Head ref or commit to diff. Defaults to HEAD.'
+    required: false
+    default: 'HEAD'
   run_all:
     description: 'true to run every folder regardless of diff.'
     required: false
@@ -70,6 +81,9 @@ outputs:
   manual_test_runs:
     description: Workflows that still need a manual test run.
     value: ${{ steps.plan.outputs.manual_test_runs }}
+  proofs_determined:
+    description: 'false when changed files could not be determined, so required workflow proofs are unknown.'
+    value: ${{ steps.plan.outputs.proofs_determined }}
 runs:
   using: composite
   steps:
@@ -89,10 +103,16 @@ runs:
       shell: bash
       env:
         PLAN_BASE: ${{ inputs.base }}
+        PLAN_BASE_REF: ${{ inputs.base_ref }}
+        PLAN_HEAD: ${{ inputs.head }}
         RUN_ALL: ${{ inputs.run_all }}
       run: |
         if [ "$RUN_ALL" = true ]; then
           node platform/tools/ci-plan.mjs --all
         else
-          node platform/tools/ci-plan.mjs --base "$PLAN_BASE"
+          if [ -n "$PLAN_BASE_REF" ]; then
+            node platform/tools/ci-plan.mjs --base-ref "$PLAN_BASE_REF" --head "$PLAN_HEAD"
+          else
+            node platform/tools/ci-plan.mjs --base "$PLAN_BASE" --head "$PLAN_HEAD"
+          fi
         fi
