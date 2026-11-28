@@ -1233,6 +1233,63 @@ test('CI gate checks run budget with aim and limit env vars', () => {
   assert.match(stepsText, /\$CD_TEST_RUNS/, 'the budget must receive the CD test runs');
 });
 
+test('CI gate requires explicit proofs_determined=true from the active PR plan job only on pull_request', async () => {
+  const workflow = load('ci-pr-checks.yml');
+  const step = workflow.jobs.gate.steps.find(s => s.name === 'Require every planned job to pass');
+  const script = step.run;
+  assert.match(script, /EVENT_NAME.*pull_request/, 'proof guard must be PR-only');
+  assert.match(script, /proofs_determined=missing/, 'missing output must be treated as missing');
+
+  const run = async env => {
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'gate-proofs-'));
+    const summary = path.join(dir, 'summary.md');
+    await fs.promises.writeFile(summary, '');
+    try {
+      await execFileAsync('bash', ['-ec', script], {
+        cwd: dir,
+        env: {
+          ...process.env,
+          RESULTS: JSON.stringify({plan: {result: env.PLAN_RESULT || 'skipped'}, 'plan-test-run': {result: env.PLAN_TEST_RUN_RESULT || 'skipped'}}),
+          PLAN_RESULT: env.PLAN_RESULT || 'skipped',
+          PLAN_TEST_RUN_RESULT: env.PLAN_TEST_RUN_RESULT || 'skipped',
+          PLAN_PROOFS_DETERMINED: env.PLAN_PROOFS_DETERMINED ?? '',
+          PLAN_TEST_RUN_PROOFS_DETERMINED: env.PLAN_TEST_RUN_PROOFS_DETERMINED ?? '',
+          EVENT_NAME: env.EVENT_NAME,
+          GITHUB_STEP_SUMMARY: summary
+        }
+      });
+      return {code: 0};
+    } catch (error) {
+      return {code: error.code ?? 1, stderr: String(error.stderr || '')};
+    } finally {
+      await fs.promises.rm(dir, {recursive: true, force: true});
+    }
+  };
+
+  for (const proofs of ['false', '', 'missing']) {
+    const result = await run({
+      EVENT_NAME: 'pull_request',
+      PLAN_RESULT: 'success',
+      PLAN_PROOFS_DETERMINED: proofs
+    });
+    assert.notEqual(result.code, 0, `PR gate must fail when proofs_determined is ${proofs || 'missing'}`);
+  }
+
+  const ok = await run({EVENT_NAME: 'pull_request', PLAN_RESULT: 'success', PLAN_PROOFS_DETERMINED: 'true'});
+  assert.equal(ok.code, 0, 'PR gate must pass when active plan reports proofs_determined=true');
+
+  for (const EVENT_NAME of ['workflow_dispatch', 'push']) {
+    for (const proofs of ['false', '', 'missing']) {
+      const result = await run({
+        EVENT_NAME,
+        PLAN_RESULT: 'success',
+        PLAN_PROOFS_DETERMINED: proofs
+      });
+      assert.equal(result.code, 0, `${EVENT_NAME} must keep previous behaviour when proofs_determined is ${proofs || 'missing'}`);
+    }
+  }
+});
+
 // Behavior tests for the real "Check run budget" step.
 // Extract the gate's run script, run it with `bash -e` (as GitHub does), with a fake `gh`
 // that returns one JSON object per page, or an array of pages when the step passes --slurp.
@@ -1432,11 +1489,36 @@ test('the plan action and both plan jobs expose the same test-run outputs', () =
   }
   assert.deepEqual(
     Object.keys(action.outputs).toSorted(),
-    [...FOLDERS, 'image_matrix', ...outputNames, 'cd_test_runs', 'manual_test_runs'].toSorted()
+    [...FOLDERS, 'image_matrix', ...outputNames, 'cd_test_runs', 'manual_test_runs', 'proofs_determined'].toSorted()
   );
   const text = fs.readFileSync(path.join(workflowDir, 'ci-pr-checks.yml'), 'utf8');
   assert.match(text, /outputs: &plan-outputs/);
   assert.match(text, /outputs: \*plan-outputs/);
+});
+
+test('PR planning forwards PR head through the plan action and ci-pr-checks wiring', () => {
+  const action = parseYaml(fs.readFileSync(path.join(repoRoot, '.github/actions/plan/action.yml'), 'utf8'));
+  assert.ok(action.inputs.head, 'plan action must expose a head input');
+  const step = action.runs.steps.find(s => s.id === 'plan');
+  assert.equal(step.env.PLAN_HEAD, '${{ inputs.head }}');
+  assert.match(
+    step.run,
+    /node platform\/tools\/ci-plan\.mjs --base-ref "\$PLAN_BASE_REF" --head "\$PLAN_HEAD"/,
+    'plan action must forward --head on the PR base-ref command'
+  );
+  assert.match(
+    step.run,
+    /node platform\/tools\/ci-plan\.mjs --base "\$PLAN_BASE" --head "\$PLAN_HEAD"/,
+    'plan action must forward --head on the fallback base command'
+  );
+
+  const workflow = load('ci-pr-checks.yml');
+  assert.equal(
+    workflow.jobs.plan.env.PLAN_HEAD,
+    '${{ github.event.pull_request.head.sha || github.sha }}',
+    'ci-pr-checks must plan the PR head'
+  );
+  assert.equal(workflow.jobs.plan.steps[1].with.head, '${{ env.PLAN_HEAD }}');
 });
 
 test('the planner has an output on the plan job for every folder and every test-run selector', () => {
@@ -1450,7 +1532,8 @@ test('the planner has an output on the plan job for every folder and every test-
       'ci_test_runs',
       'cd_test_runs',
       'prove_cd_test_runs',
-      'manual_test_runs'
+      'manual_test_runs',
+      'proofs_determined'
     ])
   );
 });
@@ -2036,6 +2119,21 @@ test('ci-publish test call plans what the PR changes, not everything', () => {
   assert.equal(dispatchInput.type, 'boolean');
   assert.equal(dispatchInput.default, true, 'manual dispatch keeps the run-everything option');
 
-  const planBase = String(workflow.jobs.plan.env.PLAN_BASE);
-  assert.match(planBase, /pull_request\.base\.sha/, 'a PR test call must diff against the PR base');
+  const env = workflow.jobs.plan.env;
+  assert.equal(
+    env.PLAN_BASE_REF,
+    "${{ github.event_name == 'pull_request' && github.base_ref || '' }}",
+    'a PR test call must plan against the current base branch, not a recorded base SHA'
+  );
+  assert.equal(
+    env.PLAN_HEAD,
+    "${{ github.event.pull_request.head.sha || github.sha }}",
+    'a PR test call must plan the PR head, not the synthetic merge checkout'
+  );
+  assert.doesNotMatch(String(env.PLAN_BASE), /pull_request\.base\.sha/, 'stale PR base SHA must not be used');
+
+  const planStep = workflow.jobs.plan.steps.find(step => step.uses === './.github/actions/plan');
+  assert.equal(planStep.with.base, '${{ env.PLAN_BASE }}');
+  assert.equal(planStep.with.base_ref, '${{ env.PLAN_BASE_REF }}');
+  assert.equal(planStep.with.head, '${{ env.PLAN_HEAD }}', 'publish plan must forward PR head to the planner');
 });

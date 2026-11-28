@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {roadLayerIds} from '../pinned-core.mjs';
 import {matchesStreetName, normalizeSearchText} from '../../src/shared/core.js';
 import {
   CAMERA_HOLD_MILLISECONDS,
@@ -145,15 +146,19 @@ const expectQueryHighlights = async page => {
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 };
-const ROAD_LAYERS = [
+// The published core names the selectable road lines; a later release can add '-on-bridge' copies
+// without changing this list. Park-route casing is only the wider underlay of the cream 'park-routes'
+// line, so it adds no separate street name.
+const ROAD_LAYERS = roadLayerIds([
   'steps',
   'cycleways',
   'paths',
   'footways',
+  'park-routes',
   'pedestrian-streets',
   'minor-roads',
   'major-roads'
-];
+]);
 // Street candidates come from rendered road lines and loaded address labels; the app's matcher decides which names
 // become rows, so the expected set follows both the view and the query.
 const streetNamesForQuery = async (page, query) => {

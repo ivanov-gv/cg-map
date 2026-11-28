@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {roadLayerIds} from '../../tests/pinned-core.mjs';
 import {selectTappedFeature} from './map-selection.js';
 
+const roadLayers = roadLayerIds([
+  'steps',
+  'cycleways',
+  'paths',
+  'footways',
+  'park-routes',
+  'pedestrian-streets',
+  'minor-roads',
+  'major-roads'
+]);
 const GREEN_LAND_KINDS = [
   'park', 'garden', 'woods', 'meadow', 'grass',
   'scrub', 'sports', 'cemetery', 'playground'
@@ -26,6 +37,7 @@ test('every extracted green land kind is selectable on the basemap', () => {
       buildingAddresses: new Map(),
       placeHitLayers: [],
       placesById: new Map(),
+      roadLayers,
       showPlace: () => {},
       showPoint: point => selected.push(point)
     });
@@ -47,6 +59,7 @@ function selectFrom(hits, existingLayers) {
     buildingAddresses: new Map(),
     placeHitLayers: [],
     placesById: new Map(),
+    roadLayers,
     showPlace: () => {},
     showPoint: point => selected.push(point)
   });
@@ -71,4 +84,35 @@ test('a protected area wins over unnamed woods and water, never over a named par
   assert.equal(selectFrom([lake, gorica], layers).name, 'Skadarsko jezero');
   // An older map-core has no protected-area layer; the tap still selects the woods instead of failing.
   assert.equal(selectFrom([woods], ['land', 'water']).kind, 'Land');
+});
+
+test('road selection queries exactly the road layer ids returned by map-core', () => {
+  const publishedRoadLayers = roadLayerIds(['steps', 'major-roads']);
+  let geographyQueryLayers = [];
+  const map = {
+    getLayer: () => true,
+    queryRenderedFeatures(_point, {layers}) {
+      if (layers.includes('land')) geographyQueryLayers = layers;
+      return [];
+    }
+  };
+  selectTappedFeature(map, {point: {}, lngLat: {toArray: () => [19, 42]}}, {
+    isMapReady: true,
+    buildingAddresses: new Map(),
+    placeHitLayers: [],
+    placesById: new Map(),
+    roadLayers: publishedRoadLayers,
+    showPlace: () => {},
+    showPoint: () => {}
+  });
+  assert.deepEqual(geographyQueryLayers, [
+    'building-numbers',
+    'buildings',
+    'road-labels',
+    ...publishedRoadLayers,
+    'land',
+    'protected-areas',
+    'water',
+    'rivers'
+  ]);
 });

@@ -69,19 +69,19 @@ function selectTappedMarker(map, event, context) {
 export function selectTappedFeature(map, event, context) {
   if (!context.isMapReady) return;
   if (selectTappedMarker(map, event, context)) return;
-  const {buildingAddresses, showPoint, onEmptyTap} = context;
-  const roadLayers = [
-    'road-labels',
-    'steps',
-    'cycleways',
-    'paths',
-    'footways',
-    'pedestrian-streets',
-    'minor-roads',
-    'major-roads'
-  ];
+  const {buildingAddresses, showPoint, onEmptyTap, roadLayers} = context;
+  // Road labels are symbol hits, not road lines: map-core's road ids cover the lines, so keep labels separate.
+  const roadHitLayers = ['road-labels', ...roadLayers];
   // A map-core release without the protected-area layer must not make the query fail, so ask only for existing layers.
-  const queryLayers = ['building-numbers', 'buildings', ...roadLayers, 'land', 'protected-areas', 'water', 'rivers'];
+  const queryLayers = [
+    'building-numbers',
+    'buildings',
+    ...roadHitLayers,
+    'land',
+    'protected-areas',
+    'water',
+    'rivers'
+  ];
   const features = map.queryRenderedFeatures(event.point, {layers: queryLayers.filter(id => map.getLayer(id))});
   const isGreenArea = feature => feature.layer.id === 'land' && GREEN_LAND_KINDS.has(feature.properties.kind);
   const isWater = feature => feature.layer.id === 'water' || feature.layer.id === 'rivers';
@@ -91,7 +91,7 @@ export function selectTappedFeature(map, event, context) {
   const selectedFeature =
     features.find(feature => feature.layer.id === 'buildings') ??
     features.find(feature => feature.layer.id === 'building-numbers') ??
-    features.find(feature => roadLayers.includes(feature.layer.id)) ??
+    features.find(feature => roadHitLayers.includes(feature.layer.id)) ??
     features.find(feature => isGreenArea(feature) && isNamed(feature)) ??
     features.find(feature => isWater(feature) && isNamed(feature)) ??
     features.find(feature => feature.layer.id === 'protected-areas') ??

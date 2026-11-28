@@ -242,7 +242,7 @@ function testRunCallsFor(folders, changedFiles) {
   return {testRuns, inPlace, separate, proveCdTestRuns};
 }
 
-export function formatOutputs({folders}, changedFiles = []) {
+export function formatOutputs({folders, proofsDetermined = true}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
   const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
   return [
@@ -252,11 +252,12 @@ export function formatOutputs({folders}, changedFiles = []) {
     `ci_test_runs=${JSON.stringify(separate)}`,
     `cd_test_runs=${JSON.stringify(testRuns.cd)}`,
     `prove_cd_test_runs=${proveCdTestRuns}`,
-    `manual_test_runs=${JSON.stringify(testRuns.manual)}`
+    `manual_test_runs=${JSON.stringify(testRuns.manual)}`,
+    `proofs_determined=${proofsDetermined}`
   ].join('\n');
 }
 
-export function formatSummary({folders, everything}, reason, changedFiles = []) {
+export function formatSummary({folders, everything, proofsDetermined = true}, reason, changedFiles = []) {
   const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
   // formatWorkflowTestRuns still owns the CD and manual lines. Drop its unsplit CI line in favor of the split pair.
   const dispatchLines = formatWorkflowTestRuns({...testRuns, ci: []}).split('\n').slice(1);
@@ -266,8 +267,40 @@ export function formatSummary({folders, everything}, reason, changedFiles = []) 
     `- CI test-run calls (separate): ${separate.join(', ') || 'none'}`,
     `- CI test runs in place: ${inPlace.join(', ') || 'none'}`,
     ...(proveCdTestRuns ? ['- CD proof flag: true'] : []),
-    ...dispatchLines
+    ...dispatchLines,
+    `- Workflow proofs determined: ${proofsDetermined}`
   ].join('\n');
+}
+
+const DEDICATED_BASE_REF = 'refs/ci-plan/base';
+
+// A PR base SHA recorded by GitHub goes stale after the branch merges main, so PR planning uses the merge base with
+// the current base branch instead. The base is fetched by full branch ref into a dedicated local ref so a tag cannot
+// shadow it; merge-base is computed against the PR head, not a synthetic merge checkout.
+export function resolveBaseRef(baseRef, head = 'HEAD', options = {}) {
+  // eslint-disable-next-line no-control-regex -- base refs must not contain control characters.
+  const hasControlChars = /[\u0000-\u001f\u007f]/.test(baseRef);
+  if (
+    typeof baseRef !== 'string' ||
+    baseRef === '' ||
+    baseRef.startsWith('-') ||
+    hasControlChars ||
+    baseRef.includes('@{')
+  ) {
+    throw new Error(`invalid base ref: ${baseRef}`);
+  }
+  const cwd = options.cwd ?? process.cwd();
+  const git =
+    options.git ?? ((args, runOptions = {}) => execFileSync('git', args, {cwd, encoding: 'utf8', ...runOptions}));
+  try {
+    git(['check-ref-format', '--branch', baseRef], {stdio: ['ignore', 'pipe', 'pipe']});
+  } catch {
+    throw new Error(`invalid base ref: ${baseRef}`);
+  }
+  git(['fetch', '--no-tags', '--force', 'origin', `refs/heads/${baseRef}:${DEDICATED_BASE_REF}`], {
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  return git(['merge-base', DEDICATED_BASE_REF, head], {stdio: ['ignore', 'pipe', 'pipe']}).trim();
 }
 
 function listChangedFiles(base, head) {
@@ -281,19 +314,29 @@ function main(args) {
     const index = args.indexOf(name);
     return index < 0 ? '' : (args[index + 1] ?? '');
   };
-  const base = option('--base');
+  const baseRef = option('--base-ref');
+  let base = option('--base');
   const head = option('--head') || 'HEAD';
   const isZeroBase = /^0+$/.test(base);
 
   let plan;
   let changedFiles = [];
   let reason = '';
+  if (baseRef && !args.includes('--all')) {
+    try {
+      base = resolveBaseRef(baseRef, head);
+    } catch (error) {
+      console.log(`::warning::Could not resolve base ref ${baseRef}, so everything runs: ${error.message}`);
+      base = '';
+      reason = 'base ref failed';
+    }
+  }
   if (args.includes('--all')) {
     plan = planChanges([]);
     reason = 'requested';
   } else if (!base || isZeroBase) {
     plan = planChanges([]);
-    reason = 'no base commit';
+    if (!reason) reason = 'no base commit';
   } else {
     try {
       changedFiles = listChangedFiles(base, head);
@@ -304,7 +347,7 @@ function main(args) {
       reason = 'diff failed';
     }
   }
-  if (changedFiles.includes(LOCKFILE)) {
+  if (changedFiles.includes(LOCKFILE) && base) {
     const lockPlan = planLockfileChanges(base, head);
     if (lockPlan.error) console.log(`::warning::${lockPlan.error}, so everything runs`);
     if (lockPlan.reason) reason = lockPlan.reason;
@@ -313,10 +356,12 @@ function main(args) {
       : planChanges(changedFiles, {lockfileFolders: lockPlan.folders});
   }
 
-  const summary = formatSummary(plan, reason, changedFiles);
+  const proofsDetermined = !['base ref failed', 'diff failed', 'no base commit'].includes(reason);
+  const planWithProofs = {...plan, proofsDetermined};
+  const summary = formatSummary(planWithProofs, reason, changedFiles);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
-  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${formatOutputs(plan, changedFiles)}\n`);
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${formatOutputs(planWithProofs, changedFiles)}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main(process.argv.slice(2));

@@ -379,7 +379,9 @@ CSS does not set vector-road colors. Change map-core/map-style.js for cartograph
 ## 7. Selecting and closing a place
 
 Map clicks use queryRenderedFeatures() on the place icon, place name, and search-place layers. Places are not clustered;
-one below its level's zoom is reached through the result list.
+one below its level's zoom is reached through the result list. Road line ids come from map-core's `roadLayerIds`: app.js
+passes them to selection and visible-road search, and keeps the `road-labels` symbol layer separate. A later core
+release can add `-on-bridge` copies of those layers without a Web-side list to update.
 
 - A listing hit passes the first active ID of the first rendered marker hit to PlaceSelection.showPlace(); there is no
   chooser for co-located or overlapping listings.
