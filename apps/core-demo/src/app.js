@@ -7,6 +7,7 @@ import {
   installPlaces,
   offsetCoordinate,
   parseVisibilityConfig,
+  placeVisibilityLevel,
   registerArchiveProtocol,
   satelliteBounds,
   setSatelliteVisible,
@@ -20,10 +21,39 @@ let places;
 let visibilityConfig;
 let archiveURL;
 let overlayFeature;
+let resolvedVisibilitySamples = [];
 let isSatelliteVisible = false;
 let isOverlayVisible = true;
 let isOverlayEditable = false;
 const overlayShiftPixels = 20;
+
+// Version-5 samples have a stable identity and no stored level, so the policy or an override must resolve them.
+// They sit outside the default view: today's map looks unchanged until a control button moves the camera to one.
+export const demoVisibilitySamples = [
+  {
+    id: 'kind-band',
+    label: 'Kind rule · museum',
+    feature: {
+      type: 'Feature',
+      properties: {entityId: 'demo/kind-band', kind: 'museum', name: 'Kind-band sample'},
+      geometry: {type: 'Point', coordinates: [19.56, 42.11]}
+    }
+  },
+  {
+    id: 'override-band',
+    label: 'visibilityOverride · 4',
+    feature: {
+      type: 'Feature',
+      properties: {
+        entityId: 'demo/override-band',
+        kind: 'museum',
+        name: 'Override-band sample',
+        visibilityOverride: 4
+      },
+      geometry: {type: 'Point', coordinates: [19.58, 42.11]}
+    }
+  }
+];
 
 // Errors stay visible even if only part of a map rendered successfully.
 function showError(error) {
@@ -36,6 +66,28 @@ async function loadJSON(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   return response.json();
+}
+
+// Parses the data-owned policy once, then states the level each sample POI will use when it is installed.
+export function resolveDemoVisibility(rawConfig, policy) {
+  const config = parseVisibilityConfig(rawConfig, policy);
+  const samples = demoVisibilitySamples.map(sample => {
+    const level = placeVisibilityLevel(sample.feature, config);
+    return {
+      id: sample.id,
+      label: sample.label,
+      level,
+      zoom: config.thresholds.get(level),
+      coordinates: [...sample.feature.geometry.coordinates]
+    };
+  });
+  return {config, samples};
+}
+
+function showVisibilitySamples(samples) {
+  resolvedVisibilitySamples = samples;
+  const descriptions = samples.map(sample => `${sample.label}: level ${sample.level} · zoom ${sample.zoom}`);
+  elementById('zoom-bands').textContent = descriptions.join(' · ');
 }
 
 // Controls need a live map, so they stay disabled during startup and map recreation.
@@ -90,7 +142,8 @@ async function createConceptMap() {
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
   await whenMapReady(map);
-  installPlaces(map, places.features, visibilityConfig);
+  const sampleFeatures = demoVisibilitySamples.map(sample => sample.feature);
+  installPlaces(map, [...places.features, ...sampleFeatures], visibilityConfig);
   overlayFeature = {
     type: 'Feature',
     id: 'concept',
@@ -195,22 +248,29 @@ function registerConceptControls() {
   elementById('overlay-toggle').onclick = toggleOverlay;
   elementById('overlay-editable').onclick = toggleOverlayEditable;
   elementById('clear-selection').onclick = clearOverlaySelection;
+  for (const sample of resolvedVisibilitySamples) {
+    elementById(sample.id).onclick = () => map.jumpTo({center: sample.coordinates, zoom: sample.zoom});
+  }
 }
 
 // Loads shared inputs once; only the map itself is recreated by the lifecycle control.
 async function start() {
-  const [mapMetadata, sourcePlaces, rawVisibilityConfig] = await Promise.all([
+  const [mapMetadata, sourcePlaces, rawVisibilityConfig, rawVisibilityPolicy] = await Promise.all([
     loadJSON('data/map.json'),
     loadJSON('data/places.geojson'),
-    loadJSON('data/place-visibility.json')
+    loadJSON('data/place-visibility.json'),
+    loadJSON('data/place-visibility-policy.json')
   ]);
   places = sourcePlaces;
   if (!archiveFilenamePattern.test(mapMetadata.archive)) throw new Error('Invalid map archive metadata.');
-  visibilityConfig = parseVisibilityConfig(rawVisibilityConfig);
+  const {config, samples} = resolveDemoVisibility(rawVisibilityConfig, rawVisibilityPolicy);
+  visibilityConfig = config;
+  showVisibilitySamples(samples);
   archiveURL = 'pmtiles://' + new URL(`data/${mapMetadata.archive}`, location.href).href;
   registerArchiveProtocol(maplibregl, pmtiles);
   registerConceptControls();
   await recreateConceptMap();
 }
 
-start().catch(showError);
+// Consumer tests import the resolver without a DOM; only a browser starts the app.
+if (typeof document !== 'undefined') start().catch(showError);

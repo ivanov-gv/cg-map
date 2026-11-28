@@ -1,5 +1,34 @@
 import {test, expect} from '@playwright/test';
 
+// The two version-5 samples are resolved by the data policy and installed away from the default view.
+const visibilitySamples = [
+  {buttonId: 'kind-band', center: [19.56, 42.11], level: 2, markerId: 'demo/kind-band', zoom: 14},
+  {buttonId: 'override-band', center: [19.58, 42.11], level: 4, markerId: 'demo/override-band', zoom: 16}
+];
+
+// Checks that a sample renders at its resolved zoom threshold and not one zoom level below it.
+async function checkVisibilitySampleBand(page, sample) {
+  const layerId = `place-icons-${sample.level}-open`;
+  const isSampleRendered = () =>
+    page.evaluate(
+      ({layerId, markerId}) =>
+        window.coreDemoDebug.map
+          .queryRenderedFeatures({layers: [layerId]})
+          .some(feature => feature.properties.markerKey === markerId),
+      {layerId, markerId: sample.markerId}
+    );
+  await page.locator(`#${sample.buttonId}`).click();
+  await expect.poll(() => page.evaluate(() => window.coreDemoDebug.map.getZoom())).toBe(sample.zoom);
+  const isCentered = await page.evaluate(center => {
+    const mapCenter = window.coreDemoDebug.map.getCenter();
+    return Math.abs(mapCenter.lng - center[0]) < 0.001 && Math.abs(mapCenter.lat - center[1]) < 0.001;
+  }, sample.center);
+  expect(isCentered).toBe(true);
+  await expect.poll(isSampleRendered).toBe(true);
+  await page.evaluate(zoom => window.coreDemoDebug.map.jumpTo({zoom}), sample.zoom - 1);
+  await expect.poll(isSampleRendered).toBe(false);
+}
+
 // Exercises each shared capability through the public map-core entry only.
 test.describe('core concepts', () => {
   test('core concept controls exercise camera, POIs, projection, overlays, states, selection, satellite and teardown', async ({
@@ -71,6 +100,11 @@ test.describe('core concepts', () => {
     await expect(page.locator('#geometry')).toHaveText('Point');
     await expect(page.locator('#satellite')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('#overlay-editable')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#zoom-bands')).toContainText('Kind rule · museum: level 2 · zoom 14');
+    await expect(page.locator('#zoom-bands')).toContainText('visibilityOverride · 4: level 4 · zoom 16');
+    for (const sample of visibilitySamples) {
+      await checkVisibilitySampleBand(page, sample);
+    }
     await expect(page.locator('#error')).toBeHidden();
     expect(scriptErrors).toEqual([]);
   });
