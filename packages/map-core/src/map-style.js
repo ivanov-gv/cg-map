@@ -27,12 +27,53 @@ const majorRoadKinds = [
 const majorCasingWidthStops = [7, 0.7, 12, 2, 16, 9, 20, 65];
 const minorCasingWidthStops = [13, 1.6, 14, 3.2, 17, 10, 20, 38];
 const bridgeEdgeWidthPixels = 2.2;
+const raisedRoadLayerSuffix = '-on-bridge';
 
 const roadKindFilter = roadKinds => ['in', roadKind, ['literal', roadKinds]];
 const majorRoadFilter = roadKindFilter(majorRoadKinds);
 // Ways that are not carriageways get their own pattern; one generic minor-road stroke hides the walking network.
 const nonStreetFilter = roadKindFilter(['footway', 'pedestrian', 'path', 'track', 'cycleway', 'steps']);
 const streetFilter = ['all', ['!', majorRoadFilter], ['!', nonStreetFilter]];
+// A road's own tags decide its level: a tunnel and a negative `layer` always stay below decks; otherwise any bridge
+// kind or positive `layer` puts it above them. `layer` arrives as an integer or its string form; the style has no
+// tunnel-specific drawing, so a tunnel gets the same look as its road kind.
+const roadLayerLevel = ['to-number', ['get', 'layer'], 0];
+const hasBridgeTag = ['all', ['has', 'bridge'], ['!=', ['get', 'bridge'], 'no']];
+const hasNegativeLayer = ['<', roadLayerLevel, 0];
+const isAboveGround = ['>', roadLayerLevel, 0];
+const isTunnel = ['all', ['has', 'tunnel'], ['!=', ['get', 'tunnel'], 'no']];
+const isRoadOnBridge = [
+  'all',
+  ['!', isTunnel],
+  ['!', hasNegativeLayer],
+  ['any', hasBridgeTag, isAboveGround]
+];
+const isRoadUnderDeck = ['!', isRoadOnBridge];
+
+function withRoadLevel(filter, roadLevel) {
+  return filter ? ['all', filter, roadLevel] : roadLevel;
+}
+
+// Each road kind is drawn twice: the original id holds ground and lower roads below decks, and a new id holds
+// roads whose own tags put them above decks. No look is inferred from a bridge outline crossing the road.
+function roadLayersAtLevels(groups) {
+  const groundRoads = [];
+  const raisedRoads = [];
+  for (const {group, layers} of groups) {
+    for (const layer of layers) {
+      groundRoads.push(inDrawingGroup(group, {
+        ...layer,
+        filter: withRoadLevel(layer.filter, isRoadUnderDeck)
+      }));
+      raisedRoads.push(inDrawingGroup(`bridge-${group}`, {
+        ...layer,
+        id: `${layer.id}${raisedRoadLayerSuffix}`,
+        filter: withRoadLevel(layer.filter, isRoadOnBridge)
+      }));
+    }
+  }
+  return {groundRoads, raisedRoads};
+}
 
 // Dashes end square by default; a dotted line passes cap 'round' with zero-length dashes, so each dot is round.
 function roadLineLayer({id, color, width, filter, minzoom = 0, dash, cap = dash ? 'butt' : 'round', opacity}) {
@@ -207,11 +248,11 @@ function streetLayers() {
       filter: majorRoadFilter
     })
   ];
-  return streets.map(layer => inDrawingGroup('streets', layer));
+  return streets;
 }
 
 // One outline is one deck: the fill carries every road of that crossing, and the closed line draws its dark edge.
-// The group sits below streets, so roads drawn over an outline stay on top of the deck.
+// The group sits between ground roads and roads on bridges, so only roads whose own tags name a bridge cover it.
 function bridgeLayers() {
   return [
     inDrawingGroup('bridges', {
@@ -254,68 +295,87 @@ const isCyclewayOutsideParks = ['all', roadKindFilter(['cycleway']), ['!', isPar
 const dottedLine = [0, 2.2];
 const trailOpacity = 0.75;
 
-function walkingLayers() {
+function walkingLayerGroups() {
   return [
-    inDrawingGroup('trails', roadLineLayer({
-      id: 'paths',
-      color: colors.trail,
-      width: scaledWidth(1, 1.5, 3),
-      filter: isTrail,
-      minzoom: 13,
-      dash: dottedLine,
-      cap: 'round',
-      opacity: trailOpacity
-    })),
-    inDrawingGroup('trails', roadLineLayer({
-      id: 'footways',
-      color: colors.cityFootpath,
-      width: scaledWidth(1.2, 1.8, 3.5),
-      filter: isCityFootpath,
-      minzoom: 13,
-      dash: dottedLine,
-      cap: 'round'
-    })),
-    inDrawingGroup('main-routes', roadLineLayer({
-      id: 'park-route-casing',
-      color: colors.parkRouteCasing,
-      width: scaledWidth(2.4, 3.6, 9),
-      filter: isParkRoute,
-      minzoom: 13
-    })),
-    inDrawingGroup('main-routes', roadLineLayer({
-      id: 'park-routes',
-      color: colors.parkRoute,
-      width: scaledWidth(1.4, 2.2, 6),
-      filter: isParkRoute,
-      minzoom: 13
-    })),
-    inDrawingGroup('main-routes', roadLineLayer({
-      id: 'cycleways',
-      color: colors.cycleway,
-      width: scaledWidth(1.2, 2, 4),
-      filter: isCyclewayOutsideParks,
-      minzoom: 13,
-      dash: [3, 1.5]
-    })),
-    inDrawingGroup('stairways', roadLineLayer({
-      id: 'steps',
-      color: colors.stairway,
-      width: scaledWidth(2.4, 4, 9),
-      filter: roadKindFilter(['steps']),
-      minzoom: 13,
-      dash: [0.4, 0.35]
-    }))
+    {
+      group: 'trails',
+      layers: [
+        roadLineLayer({
+          id: 'paths',
+          color: colors.trail,
+          width: scaledWidth(1, 1.5, 3),
+          filter: isTrail,
+          minzoom: 13,
+          dash: dottedLine,
+          cap: 'round',
+          opacity: trailOpacity
+        }),
+        roadLineLayer({
+          id: 'footways',
+          color: colors.cityFootpath,
+          width: scaledWidth(1.2, 1.8, 3.5),
+          filter: isCityFootpath,
+          minzoom: 13,
+          dash: dottedLine,
+          cap: 'round'
+        })
+      ]
+    },
+    {
+      group: 'main-routes',
+      layers: [
+        roadLineLayer({
+          id: 'park-route-casing',
+          color: colors.parkRouteCasing,
+          width: scaledWidth(2.4, 3.6, 9),
+          filter: isParkRoute,
+          minzoom: 13
+        }),
+        roadLineLayer({
+          id: 'park-routes',
+          color: colors.parkRoute,
+          width: scaledWidth(1.4, 2.2, 6),
+          filter: isParkRoute,
+          minzoom: 13
+        }),
+        roadLineLayer({
+          id: 'cycleways',
+          color: colors.cycleway,
+          width: scaledWidth(1.2, 2, 4),
+          filter: isCyclewayOutsideParks,
+          minzoom: 13,
+          dash: [3, 1.5]
+        })
+      ]
+    },
+    {
+      group: 'stairways',
+      layers: [
+        roadLineLayer({
+          id: 'steps',
+          color: colors.stairway,
+          width: scaledWidth(2.4, 4, 9),
+          filter: roadKindFilter(['steps']),
+          minzoom: 13,
+          dash: [0.4, 0.35]
+        })
+      ]
+    }
   ];
 }
 
-const baseRoadLayerIds = new Set([...streetLayers(), ...walkingLayers()].map(({id}) => id));
+const roadLayerGroups = () => [
+  {group: 'streets', layers: streetLayers()},
+  ...walkingLayerGroups()
+];
+const baseRoadLayerIds = new Set(roadLayerGroups().flatMap(({layers}) => layers.map(({id}) => id)));
 
-// Applications that hit-test roads by style layer id pass the base ids they already use. An unknown id fails loudly,
-// so a renamed or label layer cannot silently drop roads from a query.
+// Applications that hit-test roads by style layer id pass the base ids they already use and get both levels back.
+// An unknown id fails loudly, so a renamed, label or already-raised layer cannot silently drop roads from a query.
 export function roadLayerIds(baseIds) {
-  return baseIds.map(id => {
+  return baseIds.flatMap(id => {
     if (!baseRoadLayerIds.has(id)) throw new Error(`Unknown road layer: ${id}`);
-    return id;
+    return [id, `${id}${raisedRoadLayerSuffix}`];
   });
 }
 
@@ -368,6 +428,7 @@ function labelLayers() {
 // basemapURL: 'pmtiles://<archive>' for the archive read directly, or the server's TileJSON URL.
 // Layers follow drawingGroups bottom to top; points of interest are installed later, above every basemap layer.
 export function mapStyle(basemapURL, assetBaseURL) {
+  const roads = roadLayersAtLevels(roadLayerGroups());
   return {
     version: 8,
     glyphs: new URL('fonts/', assetBaseURL).href + '{fontstack}/{range}.pbf',
@@ -391,10 +452,10 @@ export function mapStyle(basemapURL, assetBaseURL) {
       ...buildingLayers(),
       ...meadowLayers(),
       ...contourLayers(),
-      ...bridgeLayers(),
       ...railwayLayers(),
-      ...streetLayers(),
-      ...walkingLayers(),
+      ...roads.groundRoads,
+      ...bridgeLayers(),
+      ...roads.raisedRoads,
       ...contourLabelLayers(),
       ...labelLayers(),
       ...railwayLabelLayers(),
