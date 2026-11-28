@@ -46,8 +46,8 @@ function widenedBounds([west, south, east, north], metres) {
 
 const keptAreaLists = createKeptBox();
 
-const canReshape = (entry, rule) =>
-  isArea(entry.feature.geometry) && featureCapabilities(entry.feature, rule).canReshape;
+const canReshape = (entry, rule, bundleVersion) =>
+  isArea(entry.feature.geometry) && featureCapabilities(entry.feature, rule, bundleVersion).canReshape;
 
 // The other areas of the same file around a place or a shape. What only frames the map, such as the sea, is none of them.
 // A wide box is kept per rule, so nearby questions of a drag need one read of the file.
@@ -58,7 +58,8 @@ export function neighbouringAreas(geometry, {filename, key}, context, marginMetr
   const candidates = keptAreaLists(
     entries,
     bounds,
-    wideBounds => entriesWithin(entries, wideBounds).filter(entry => canReshape(entry, rule)),
+    wideBounds =>
+      entriesWithin(entries, wideBounds).filter(entry => canReshape(entry, rule, context.rules?.bundleVersion)),
     rule
   );
   return entriesWithin(candidates, bounds).filter(entry => entry.key !== key);

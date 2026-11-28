@@ -134,14 +134,20 @@ export function turnIndex(positions, coordinate) {
   return best.index;
 }
 
+// The released bundle fills an empty tab from the line's last stop. A version 5 headsign is a source fact, so its
+// behavior names the direction without inventing one.
+function directionLabel(direction, index, context) {
+  const lastStop = direction.stops.findLast(stop => !isTurnPoint(stop));
+  return direction.headsign || (lastStop ? `To ${stopName(lastStop, context)}` : `Direction ${index + 1}`);
+}
+
 function directionTabs(edit) {
   const row = document.createElement('div');
   row.className = 'button-row';
   const shownIndex = shownDirectionIndex(edit);
-  directionsOf(edit.feature).forEach(({headsign, stops}, index) => {
-    const lastStop = stops.findLast(stop => !isTurnPoint(stop));
-    const fallback = lastStop ? `To ${stopName(lastStop, edit.context)}` : `Direction ${index + 1}`;
-    const tab = createElementWithText('button', headsign || fallback);
+  directionsOf(edit.feature).forEach((direction, index) => {
+    const label = (edit.behavior?.directionLabel ?? directionLabel)(direction, index, edit.context);
+    const tab = createElementWithText('button', label);
     tab.type = 'button';
     tab.setAttribute('aria-pressed', String(index === shownIndex));
     tab.onclick = () => edit.setExtras({direction: index});
@@ -199,15 +205,25 @@ function renderRoute(container, edit) {
   edit.context.showPath(directionPath(stops, edit.context), edit.feature.properties.colour ?? defaultColour);
 }
 
-// A direction says where it goes; an intercity one has an identity, which a new one gets here.
-function preparedRoute(feature, context) {
+// An intercity direction keeps a producer-readable identity even in a bundle where the headsign is a source fact and
+// must not be derived. Assigning the ID stays independent of filling that text.
+function withDirectionIdentity(feature) {
   const directions = directionsOf(feature).map(direction => {
-    const lastStop = direction.stops.findLast(stop => !isTurnPoint(stop));
-    const headsign = direction.headsign || (lastStop ? stopName(lastStop, context) : '');
     const needsIdentity = feature.properties.network === 'intercity' && !direction.entityId;
-    return {...direction, headsign, ...(needsIdentity ? {entityId: `local:${crypto.randomUUID()}`} : {})};
+    return needsIdentity ? {...direction, entityId: `local:${crypto.randomUUID()}`} : direction;
   });
   return {...feature, properties: {...feature.properties, directions}};
+}
+
+// A direction says where it goes; an intercity one has an identity, which a new one gets here.
+function preparedRoute(feature, context) {
+  const identified = withDirectionIdentity(feature);
+  const directions = directionsOf(identified).map(direction => {
+    const lastStop = direction.stops.findLast(stop => !isTurnPoint(stop));
+    const headsign = direction.headsign || (lastStop ? stopName(lastStop, context) : '');
+    return {...direction, headsign};
+  });
+  return {...identified, properties: {...identified.properties, directions}};
 }
 
 function routeProblem({key, feature}, context) {
@@ -234,6 +250,7 @@ export const routeBehaviors = {
     sections: (_feature, {context}) =>
       context.isPhone() ? [] : [{title: 'Line', fields: ['number', 'name', 'network', 'colour']}],
     renderExtras: renderRoute,
+    directionLabel,
     prepared: preparedRoute,
     problem: routeProblem,
     companionEdits: stopLineEdits,
@@ -242,5 +259,17 @@ export const routeBehaviors = {
       message: 'The stops stay.',
       edits: stopLineEdits({key, feature: null, before: feature}, context)
     })
+  }
+};
+
+// Version 5 stops have no stored `lines` and a headsign is a verbatim source fact. Keep the route's own display and
+// checks, but derive neither of those retired values: a missing headsign is refused by the rules instead.
+export const version5RouteBehaviors = {
+  [routesFile]: {
+    ...routeBehaviors[routesFile],
+    directionLabel: (direction, index) => direction.headsign || `Direction ${index + 1}`,
+    prepared: withDirectionIdentity,
+    companionEdits: () => [],
+    deletion: () => ({message: 'The stops stay.', edits: []})
   }
 };

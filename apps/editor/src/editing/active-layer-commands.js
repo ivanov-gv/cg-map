@@ -18,7 +18,7 @@ export function createActiveLayerCommands(session, activeLayer) {
       if (foreignEdit) throw new Error(`${layer.name} cannot change ${foreignEdit.filename}.`);
       return session.recordEdits(layer.id, edits);
     },
-    undo: () => session.undo(requireActiveLayer().id),
-    redo: () => session.redo(requireActiveLayer().id)
+    undo: validate => session.undo(requireActiveLayer().id, validate),
+    redo: validate => session.redo(requireActiveLayer().id, validate)
   };
 }

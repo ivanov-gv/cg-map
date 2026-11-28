@@ -113,10 +113,51 @@ const derivedKinds = {
 
 export const isLayerObject = (filename, feature) => !derivedKinds[filename]?.includes(feature.properties.kind);
 
+// Version 5 stores the whole surface in one file. Each layer shows only the kinds it edits, so a green area and a
+// municipality never appear as pickable objects on the same screen.
+export const surfaceLayerKinds = {
+  green: [
+    'park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground', 'shade', 'protected-area'
+  ],
+  water: ['lake', 'river', 'reservoir', 'pond', 'basin', 'water', 'stream', 'canal', 'ditch', 'drain'],
+  settlements: ['municipality', 'context', 'sea']
+};
+
+// What changes in the layer registry when the reviewed bundle follows the version 5 model. Files absent from the bundle
+// are still filtered out below, so a partial fixture cannot open an empty layer.
+const version5LayerOverrides = {
+  addresses: null,
+  buildings: {files: ['buildings.geojson'], linkedFiles: []},
+  places: {},
+  roads: {files: ['roads.geojson', 'bridges.geojson'], linkedFiles: []},
+  green: {
+    files: ['surface.geojson'],
+    linkedFiles: [],
+    kindsByFile: {'surface.geojson': surfaceLayerKinds.green}
+  },
+  water: {
+    files: ['surface.geojson'],
+    linkedFiles: [],
+    kindsByFile: {'surface.geojson': surfaceLayerKinds.water}
+  },
+  relief: {files: ['relief.geojson', 'canyon-rims.geojson'], linkedFiles: [], contextFiles: []},
+  settlements: {
+    files: ['settlements.geojson', 'surface.geojson'],
+    linkedFiles: [],
+    phoneFiles: ['settlements.geojson'],
+    kindsByFile: {'surface.geojson': surfaceLayerKinds.settlements}
+  },
+  stops: {linkedFiles: []},
+  routes: {files: ['transit-routes.json'], linkedFiles: [], contextFiles: []},
+  railways: {}
+};
+
 // A reviewed bundle from an earlier version has fewer files. A layer keeps those it has, and one without any is left out.
-export function availableLayers(filenames) {
+export function availableLayers(filenames, bundleVersion = 3) {
   const isAvailable = filename => filenames.includes(filename);
-  return editorLayers
+  const layers = bundleVersion >= 5 ? editorLayers.map(layer => ({...layer, ...version5LayerOverrides[layer.id]})) : editorLayers;
+  return layers
+    .filter(layer => layer !== null)
     .map(layer => {
       const phoneFiles = (layer.phoneFiles ?? []).filter(isAvailable);
       return {
@@ -131,6 +172,12 @@ export function availableLayers(filenames) {
     .filter(layer => layer.files.length > 0);
 }
 
+// The objects this layer owns from a shared file. Other kinds stay in the file but belong to another layer.
+export const entriesForLayer = (layer, entries) => {
+  const kindsByFile = layer?.kindsByFile ?? {};
+  return entries.filter(({filename, feature}) => !kindsByFile[filename] || kindsByFile[filename].includes(feature.properties.kind));
+};
+
 // Which layer's history holds an edit of this file that came from elsewhere: the layer that edits the file itself, or
 // else one that changes it along.
 export function layerIdOfFile(filename) {
@@ -138,6 +185,15 @@ export function layerIdOfFile(filename) {
     editorLayers.find(({files}) => files.includes(filename)) ??
     editorLayers.find(({linkedFiles}) => linkedFiles.includes(filename));
   return owner?.id ?? filename;
+}
+
+// A file can belong to several layers, as version 5's surface does. A step that changes it goes into the history of every
+// one of them, so it can be taken back while any of those layers is active (ADR 0038).
+export function layerIdsForFile(filename, bundleVersion = 3, filenames = []) {
+  const ids = availableLayers(filenames, bundleVersion)
+    .filter(layer => layerFiles(layer).includes(filename))
+    .map(({id}) => id);
+  return ids.length > 0 ? ids : [layerIdOfFile(filename)];
 }
 
 export const layerFiles = layer => [...layer.files, ...layer.linkedFiles];

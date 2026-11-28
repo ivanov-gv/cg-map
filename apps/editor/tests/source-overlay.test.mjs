@@ -36,6 +36,16 @@ test('a missing hit or an unknown index resolves to nothing', () => {
   assert.deepEqual(sourceEntriesForHits([outOfRangeHit], entries), []);
 });
 
+test('a public cartography hit resolves through its stable working key', () => {
+  const surfaceFile = 'surface.geojson';
+  const entries = [entry('local:shade', stop, surfaceFile)];
+  const hit = {properties: {sourceFile: surfaceFile, selectionKey: 'local:shade'}};
+  assert.deepEqual(sourceEntriesForHits([hit], entries), entries);
+  const fromAnotherFile = {properties: {sourceFile: 'roads.geojson', selectionKey: 'local:shade'}};
+  assert.deepEqual(sourceEntriesForHits([fromAnotherFile], entries), []);
+  assert.deepEqual(sourceEntriesForHits([{properties: {sourceFile: surfaceFile, selectionKey: 'gone'}}], entries), []);
+});
+
 test('hit candidates deduplicate tile and outline hits and preserve working keys after a deletion', () => {
   const entries = [entry('4', stop), entry('local:new', {...stop, id: 'stop:8'})];
   const hit = id => ({id, properties: {sourceFile: 'transport-stops.geojson'}});
@@ -84,9 +94,11 @@ test('a public POI marker resolves only to its currently visible members', () =>
 function overlayMap() {
   const layers = [{id: 'normal-name', type: 'symbol'}];
   const sources = {};
+  const refreshed = [];
   return {
-    layers, sources,
+    layers, sources, refreshed,
     addSource: (id, source) => { sources[id] = source; },
+    refreshTiles: source => { refreshed.push(source); },
     getSource: id => ({setData: data => { sources[id].data = data; }}),
     addLayer: layer => layers.push(layer),
     getStyle: () => ({layers}),
@@ -109,6 +121,14 @@ function overlayMap() {
     }
   };
 }
+
+test('new overlay data refreshes the rendered tiles that can show old objects', () => {
+  const map = overlayMap();
+  const overlay = createSourceOverlay(map);
+  overlay.setData(overlayCollection([entry('0', stop)]));
+  overlay.setSelection(null);
+  assert.deepEqual(map.refreshed, ['editor-source', 'editor-source-selection']);
+});
 
 test('guides have hollow interiors, and selection keeps its own visibility', () => {
   const map = overlayMap();

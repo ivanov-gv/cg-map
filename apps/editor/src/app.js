@@ -14,7 +14,7 @@ import {derivedFacts} from './source-data/derived-facts.js';
 import {DraftKeeper} from './editing/draft-keeper.js';
 import {createElementWithText, elementById} from './shared/dom.js';
 import {EditSession} from './editing/edit-session.js';
-import {availableLayers} from './layers/shared/editor-layers.js';
+import {availableLayers, entriesForLayer} from './layers/shared/editor-layers.js';
 import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote} from './editing/field-items.js';
 import {createHandleLayer} from './map-tools/handle-layer.js';
 import {createJointLayer, jointMinZoom} from './layers/shared/joint-layer.js';
@@ -32,7 +32,7 @@ import {
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
 import {bridgeBehaviors} from './layers/roads/layer-bridges.js';
 import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
-import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
+import {buildingAt, placeBehaviors, version5PoiProblem} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
 import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
@@ -44,7 +44,9 @@ import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
 import {stopBehaviors} from './layers/stops/layer-stops.js';
 import {waterBehaviors} from './layers/water/layer-water.js';
-import {featureCapabilities, layerLockReason, validateLayerRules} from './layers/shared/layer-rules.js';
+import {registerVersion5Behaviors} from './layers/shared/version5-behaviors.js';
+import {surfaceResultProblemForEdits} from './layers/shared/surface-edits.js';
+import {featureCapabilities, layerLockReason, rulesForBundleVersion, validateLayerRules} from './layers/shared/layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
 import {isMagnetOn} from './map-tools/magnet-switch.js';
 import {hideModeBar, showModeBar} from './map-tools/mode-bar.js';
@@ -56,6 +58,7 @@ import {loadSourceBundle} from './source-data/source-bundle.js';
 import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from './source-data/source-overlay.js';
 import {showLevelPicker} from './layers/roads/level-picker.js';
 import {hideToast, showToast} from './map-tools/toast.js';
+import {previewLayersFromStyle} from './map-tools/basemap-layers.js';
 import {WorkingMap} from './map-tools/working-map.js';
 import {
   hideInspector,
@@ -81,6 +84,8 @@ registerBehaviors(railwayBehaviors);
 registerBehaviors(sketchBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
+// A version 5 file keeps its own name but not the fields or the followers of the released file with that name.
+registerVersion5Behaviors();
 
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 // The width at which the workspace becomes the phone one, as in style.css.
@@ -99,6 +104,7 @@ let isSatelliteVisible = false;
 let isLayerLoading = false;
 let isSourceLoading = false;
 let rules;
+let bundleVersion;
 let levels;
 let session;
 let editing;
@@ -162,6 +168,7 @@ function behaviorContext() {
   return createBehaviorContext({
     session,
     rules,
+    bundleVersion,
     levels,
     map,
     layer: activeLayer,
@@ -211,7 +218,7 @@ function showFeature(entry) {
   const {filename, key, feature} = entry;
   editing.close();
   showInspector();
-  const behavior = behaviorOf(filename, activeLayer.id);
+  const behavior = behaviorOf(filename, activeLayer.id, bundleVersion);
   setHeading(behavior.kind(feature), behavior.title(feature, behaviorContext()));
   showIdentity(entry);
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
@@ -220,7 +227,7 @@ function showFeature(entry) {
   elementById('selection-details').open = false;
   setStatus(`${activeLayer.name} · feature ${key} selected`);
   overlay.setSelection(feature.geometry ? feature : null);
-  const {canModify, lockReason} = featureCapabilities(feature, rules.layers[filename]);
+  const {canModify, lockReason} = featureCapabilities(feature, rules.layers[filename], bundleVersion);
   showLockReason(lockReason);
   if (canModify) editing.openExisting(entry);
 }
@@ -250,14 +257,33 @@ const shownFiles = () => {
 
 function withDerivedFacts(entry) {
   const {feature} = entry;
-  return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
+  // Hit tests on public cartography have no guide feature ID. The working key names the entry behind every drawn copy,
+  // including a stored label line, so picking it still opens the object the behavior preview drew.
+  return {
+    ...feature,
+    properties: {
+      ...feature.properties,
+      ...derivedFacts(entry, entriesOf),
+      selectionKey: entry.key,
+      sourceFile: entry.filename
+    }
+  };
 }
 
 // The active layer's files and every changed file use the public cartography with their working features. The others
-// stay as released, for context.
+// stay as released, for context. A behavior can ask for the whole of a shared file regardless of which of its layers
+// is open, so switching layers changes what can be picked without hiding what was already drawn or applied.
 function workingFeatures(displayFeatures) {
   const featuresByFile = new Map();
+  // A behavior that draws a shared file answers for the whole file, before the active layer narrows what can be picked.
+  // Otherwise the partial set below would hide an earlier edit from another layer that owns the same file.
+  for (const filename of sources.keys()) {
+    const behavior = behaviorOf(filename, activeLayer?.id, bundleVersion);
+    const entries = behavior.previewEntries?.(filename, {session, sources});
+    if (entries) featuresByFile.set(filename, entries.map(withDerivedFacts));
+  }
   for (const filename of shownFiles()) {
+    if (featuresByFile.has(filename)) continue;
     featuresByFile.set(filename, displayFeatures.filter(({properties}) => properties.sourceFile === filename));
   }
   for (const filename of session.changedFiles()) {
@@ -290,9 +316,11 @@ function markedFeatures() {
 
 function refreshOverlay() {
   clickCandidates = null;
-  activeEntries = activeFilter
+  const layerEntries = activeFilter
     ? activeFilter.entries(behaviorContext())
     : shownFiles().flatMap(filename => session.workingEntries(filename));
+  // One shared file can hold the objects of several layers; only this layer's kinds are its editable objects.
+  activeEntries = entriesForLayer(activeLayer, layerEntries);
   const changedFeatures = new Set(session.changedFiles().flatMap(changedFeaturesOf));
   const stateOf = entry => {
     if (activeFilter) return activeFilter.state;
@@ -302,6 +330,11 @@ function refreshOverlay() {
   const factsOf = entry => ({...levelFacts(entry), ...derivedFacts(entry, entriesOf)});
   const collection = overlayCollection(activeEntries, stateOf, factsOf);
   overlay.setData(collection);
+  overlay.setStoredPositions(
+    activeEntries.flatMap(entry =>
+      behaviorOf(entry.filename, activeLayer?.id, bundleVersion).storedPositions([entry])
+    )
+  );
   overlay.setInteriorsPickable(Boolean(activeFilter));
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
@@ -567,7 +600,18 @@ function travelHistory(travel, afterTravel = () => {}) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  if (travel() === null) return;
+  // Undo and redo can restore a shared imported step from another layer. The whole resulting surface is checked before
+  // any of its edits is written, so taking a step back can never leave an orphaned shade or a one-sided frame.
+  const validate = edits => {
+    const problem = surfaceResultProblemForEdits(session, behaviorContext(), edits);
+    return problem ? `This step would leave the surface invalid: ${problem}` : null;
+  };
+  try {
+    if (travel(validate) === null) return;
+  } catch (error) {
+    setStatus(error.message, true);
+    return;
+  }
   afterTravel();
   showSessionChange();
 }
@@ -757,9 +801,12 @@ function selectObject(entry, shouldFocus = false) {
     setStatus(applyOrCancelMessage, true);
     return false;
   }
-  const feature = featureForEntry(entry, session);
+  // A water area whose card belongs to its river opens the river instead, without changing what the map selected.
+  const context = behaviorContext();
+  const selected = behaviorOf(entry.filename, activeLayer.id, bundleVersion).selectionEntry(entry, context);
+  const feature = featureForEntry(selected, session);
   if (!feature) return false;
-  showFeature({...entry, feature});
+  showFeature({...selected, feature});
   if (shouldFocus) elementById('close-inspector').focus();
   return true;
 }
@@ -1020,13 +1067,22 @@ async function createEditorMap(mapMetadata) {
 
 function installMapLayers(visibilityConfig) {
   const placeVisibility = parseVisibilityConfig(visibilityConfig);
+  const poiProblem = version5PoiProblem(sources, bundleVersion);
+  if (poiProblem) throw new Error(poiProblem);
   const publishedPlaces = sources.get('places.geojson').collection.features;
+  const previewFeaturesByFile = new Map();
+  for (const filename of sources.keys()) {
+    const behavior = behaviorOf(filename, null, bundleVersion);
+    if (behavior.previewFeatures) previewFeaturesByFile.set(filename, behavior.previewFeatures);
+  }
   installPlaces(map, publishedPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
+    basemapLayers: previewLayersFromStyle(map.getStyle().layers, bundleVersion),
     visibilityConfig: placeVisibility,
     publishedPlaces,
-    sharedSource: 'editor-source'
+    sharedSource: 'editor-source',
+    previewFeaturesByFile
   });
   overlay = createSourceOverlay(map);
   jointLayer = createJointLayer(map);
@@ -1080,10 +1136,12 @@ async function start() {
     loadJSON('data/editor-layers.json')
   ]);
   sources = bundle;
-  rules = validateLayerRules(layerRules, [...sources.keys()]);
+  bundleVersion = sources.manifest.version;
+  // The rules of the verified version decide what can be edited; a release's top-level set is only for versions 1-4.
+  rules = validateLayerRules(rulesForBundleVersion(layerRules, bundleVersion), [...sources.keys()]);
   rules = {...rules, layers: {...rules.layers, [sketchFile]: sketchRule}};
   rules = {...rules, layers: {...rules.layers, [junctionFile]: junctionRule}};
-  layers = availableLayers([...sources.keys()]);
+  layers = availableLayers([...sources.keys()], bundleVersion);
   await createEditorMap(mapMetadata);
   installMapLayers(visibilityConfig);
   startEditing(visibilityConfig);

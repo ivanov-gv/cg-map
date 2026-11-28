@@ -16,7 +16,7 @@ function crossProduct(first, second, third) {
   return (second[0] - first[0]) * (third[1] - first[1]) - (second[1] - first[1]) * (third[0] - first[0]);
 }
 
-function pointTouchesSegment(start, end, point) {
+export function pointTouchesSegment(start, end, point) {
   const isCollinear = Math.abs(crossProduct(start, end, point)) < collinearToleranceDegreesSquared;
   const isInsideBounds =
     point[0] >= Math.min(start[0], end[0]) &&
@@ -35,7 +35,7 @@ function areSegmentsApart(firstStart, firstEnd, secondStart, secondEnd) {
   );
 }
 
-function segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd) {
+export function segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd) {
   if (areSegmentsApart(firstStart, firstEnd, secondStart, secondEnd)) return false;
   const isSecondAcrossFirst =
     crossProduct(firstStart, firstEnd, secondStart) * crossProduct(firstStart, firstEnd, secondEnd) < 0;

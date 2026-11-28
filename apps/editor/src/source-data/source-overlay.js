@@ -3,12 +3,14 @@ import {installInspectionLayers} from './inspection-layers.js';
 import {stateColors} from '../layers/shared/object-states.js';
 
 const sourceName = 'editor-source';
+const selectionSource = `${sourceName}-selection`;
 const appliedSource = 'editor-applied';
 const ghostSource = 'editor-ghost';
 const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
 const followingSource = 'editor-following';
+const storedSource = 'editor-stored';
 const overlapSource = 'editor-overlaps';
 const pathSource = 'editor-path';
 const sketchSource = 'editor-sketches';
@@ -38,13 +40,22 @@ export function overlayCollection(entries, stateOf = () => 'editable', factsOf =
 export function sourceEntriesForHits(hits, entries) {
   const indices = new Set();
   const placeIndices = new Map();
-  entries.forEach(({filename, feature}, index) => {
+  const previewIndices = new Map();
+  entries.forEach(({filename, feature, key}, index) => {
     if (filename === placesFile) placeIndices.set(feature.properties.id, index);
+    // The public cartography preview carries its working key, so a hit on it resolves to the same entry a guide would.
+    previewIndices.set(`${filename}:${key}`, index);
   });
   for (const hit of hits) {
     if (hit?.source === 'places' && hit.properties.activeIds) {
       const visibleIndices = JSON.parse(hit.properties.activeIds).map(id => placeIndices.get(id));
       for (const index of visibleIndices.filter(index => index !== undefined)) indices.add(index);
+      continue;
+    }
+    const selectionKey = hit?.properties?.selectionKey;
+    if (selectionKey !== undefined) {
+      const index = previewIndices.get(`${hit.properties.sourceFile}:${selectionKey}`);
+      if (index !== undefined) indices.add(index);
       continue;
     }
     const entry = Number.isInteger(hit?.id) ? entries[hit.id] : null;
@@ -196,6 +207,25 @@ function objectStateLayers() {
   ];
 }
 
+// Stored positions are drawn as their own marks, never as part of the object's outline and never pickable.
+function storedPositionLayers() {
+  return [
+    dashedLine('editor-stored-line', storedSource, stateColors.sketch, 2, [2, 2]),
+    {
+      id: 'editor-stored-point',
+      type: 'circle',
+      source: storedSource,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': stateColors.sketch,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1.5
+      }
+    }
+  ];
+}
+
 // What belongs to the edit in progress, and what waits from the field.
 function workLayers() {
   return [
@@ -238,6 +268,8 @@ function workLayers() {
         'circle-stroke-width': 2
       }
     },
+    // A stored label or icon position is a fact of the source, not a guide derived from the outline.
+    ...storedPositionLayers(),
     {
       id: 'editor-sketch-fill',
       type: 'fill',
@@ -297,6 +329,7 @@ function installStateLayers(map) {
     deletionSource,
     targetSource,
     followingSource,
+    storedSource,
     overlapSource,
     pathSource,
     sketchSource
@@ -335,11 +368,19 @@ export function createSourceOverlay(map) {
     }
   };
   setGuideMinZoom(guideMinZoom);
+  // A GeoJSON source update is asynchronous: a rendered hit can still resolve to an object's previous position until
+  // its tiles reload. Refreshing the affected sources keeps a moved place from appearing to stay where it was.
   return {
     layerIds: guideLayerIds,
     inspectionLayerIds: inspectionLayers,
-    setData: collection => overlay.setData(collection),
-    setSelection: feature => overlay.setSelection(feature),
+    setData: collection => {
+      overlay.setData(collection);
+      map.refreshTiles(sourceName);
+    },
+    setSelection: feature => {
+      overlay.setSelection(feature);
+      if (!feature) map.refreshTiles(selectionSource);
+    },
     setApplied: features => setData(appliedSource, features),
     setDeletions: features => setData(deletionSource, features),
     setTarget: feature => setData(targetSource, feature ? [feature] : []),
@@ -357,6 +398,7 @@ export function createSourceOverlay(map) {
       ),
     setFollowing: features =>
       setData(followingSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
+    setStoredPositions: features => setData(storedSource, features),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,
     setShownLevel(level) {

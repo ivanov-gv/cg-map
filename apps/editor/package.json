@@ -12,7 +12,7 @@
     "test:e2e:built": "playwright test"
   },
   "devDependencies": {
-    "@ivanov-gv/map-contracts": "0.2.0",
+    "@ivanov-gv/map-contracts": "0.3.0",
     "@ivanov-gv/map-data": "0.2.0",
     "@playwright/test": "1.56.1"
   },
