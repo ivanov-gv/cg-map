@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {mapStyle, parseVisibilityConfig} from '@ivanov-gv/map-core';
 import {installInspectionLayers} from '../source-data/inspection-layers.js';
-import {basemapLayersFromStyle} from './basemap-layers.js';
+import {basemapLayersFromStyle, previewLayersFromStyle} from './basemap-layers.js';
 import {WorkingMap, hiddenLayerFilter, previewLayers} from './working-map.js';
 
 const visibilityConfig = parseVisibilityConfig(
@@ -181,6 +181,17 @@ test('bridge decks and railways are previewed from the style layers map-core pub
     'railway-halts',
     'railway-stations'
   ]);
+});
+
+test('a version 5 surface preview reuses the published land, park, protected-area and water layers', () => {
+  const byFile = previewLayersFromStyle(publishedStyle.layers, 5);
+  assert.ok(byFile['surface-green.geojson'].includes('land'));
+  assert.ok(byFile['surface-green.geojson'].includes('meadows'));
+  assert.ok(byFile['surface-green.geojson'].includes('park-names'));
+  assert.ok(byFile['surface-green.geojson'].includes('protected-areas'));
+  assert.ok(byFile['surface-water.geojson'].includes('rivers'));
+  assert.ok(byFile['surface-frame.geojson'].includes('land'));
+  assert.equal(previewLayersFromStyle(publishedStyle.layers, 3)['surface-green.geojson'], undefined);
 });
 
 test('a changed file is drawn from its working features below its hidden published layers, and comes back on hide', () => {

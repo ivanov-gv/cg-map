@@ -9,6 +9,7 @@ const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
 const followingSource = 'editor-following';
+const storedSource = 'editor-stored';
 const overlapSource = 'editor-overlaps';
 const pathSource = 'editor-path';
 const sketchSource = 'editor-sketches';
@@ -196,6 +197,25 @@ function objectStateLayers() {
   ];
 }
 
+// Stored positions are drawn as their own marks, never as part of the object's outline and never pickable.
+function storedPositionLayers() {
+  return [
+    dashedLine('editor-stored-line', storedSource, stateColors.sketch, 2, [2, 2]),
+    {
+      id: 'editor-stored-point',
+      type: 'circle',
+      source: storedSource,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': stateColors.sketch,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1.5
+      }
+    }
+  ];
+}
+
 // What belongs to the edit in progress, and what waits from the field.
 function workLayers() {
   return [
@@ -238,6 +258,8 @@ function workLayers() {
         'circle-stroke-width': 2
       }
     },
+    // A stored label or icon position is a fact of the source, not a guide derived from the outline.
+    ...storedPositionLayers(),
     {
       id: 'editor-sketch-fill',
       type: 'fill',
@@ -297,6 +319,7 @@ function installStateLayers(map) {
     deletionSource,
     targetSource,
     followingSource,
+    storedSource,
     overlapSource,
     pathSource,
     sketchSource
@@ -357,6 +380,7 @@ export function createSourceOverlay(map) {
       ),
     setFollowing: features =>
       setData(followingSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
+    setStoredPositions: features => setData(storedSource, features),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,
     setShownLevel(level) {

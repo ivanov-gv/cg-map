@@ -14,7 +14,7 @@ import {derivedFacts} from './source-data/derived-facts.js';
 import {DraftKeeper} from './editing/draft-keeper.js';
 import {createElementWithText, elementById} from './shared/dom.js';
 import {EditSession} from './editing/edit-session.js';
-import {availableLayers} from './layers/shared/editor-layers.js';
+import {availableLayers, entriesForLayer, surfaceLayerKinds} from './layers/shared/editor-layers.js';
 import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote} from './editing/field-items.js';
 import {createHandleLayer} from './map-tools/handle-layer.js';
 import {createJointLayer, jointMinZoom} from './layers/shared/joint-layer.js';
@@ -44,7 +44,8 @@ import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
 import {stopBehaviors} from './layers/stops/layer-stops.js';
 import {waterBehaviors} from './layers/water/layer-water.js';
-import {featureCapabilities, layerLockReason, validateLayerRules} from './layers/shared/layer-rules.js';
+import {registerVersion5Behaviors, version5StoredPositions} from './layers/shared/version5-behaviors.js';
+import {featureCapabilities, layerLockReason, rulesForBundleVersion, validateLayerRules} from './layers/shared/layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
 import {isMagnetOn} from './map-tools/magnet-switch.js';
 import {hideModeBar, showModeBar} from './map-tools/mode-bar.js';
@@ -56,6 +57,7 @@ import {loadSourceBundle} from './source-data/source-bundle.js';
 import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from './source-data/source-overlay.js';
 import {showLevelPicker} from './layers/roads/level-picker.js';
 import {hideToast, showToast} from './map-tools/toast.js';
+import {previewLayersFromStyle} from './map-tools/basemap-layers.js';
 import {WorkingMap} from './map-tools/working-map.js';
 import {
   hideInspector,
@@ -81,6 +83,8 @@ registerBehaviors(railwayBehaviors);
 registerBehaviors(sketchBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
+// A version 5 file keeps its own name but not the fields or the followers of the released file with that name.
+registerVersion5Behaviors();
 
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 // The width at which the workspace becomes the phone one, as in style.css.
@@ -99,6 +103,7 @@ let isSatelliteVisible = false;
 let isLayerLoading = false;
 let isSourceLoading = false;
 let rules;
+let bundleVersion;
 let levels;
 let session;
 let editing;
@@ -162,6 +167,7 @@ function behaviorContext() {
   return createBehaviorContext({
     session,
     rules,
+    bundleVersion,
     levels,
     map,
     layer: activeLayer,
@@ -211,7 +217,7 @@ function showFeature(entry) {
   const {filename, key, feature} = entry;
   editing.close();
   showInspector();
-  const behavior = behaviorOf(filename, activeLayer.id);
+  const behavior = behaviorOf(filename, activeLayer.id, bundleVersion);
   setHeading(behavior.kind(feature), behavior.title(feature, behaviorContext()));
   showIdentity(entry);
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
@@ -220,7 +226,7 @@ function showFeature(entry) {
   elementById('selection-details').open = false;
   setStatus(`${activeLayer.name} · feature ${key} selected`);
   overlay.setSelection(feature.geometry ? feature : null);
-  const {canModify, lockReason} = featureCapabilities(feature, rules.layers[filename]);
+  const {canModify, lockReason} = featureCapabilities(feature, rules.layers[filename], bundleVersion);
   showLockReason(lockReason);
   if (canModify) editing.openExisting(entry);
 }
@@ -253,6 +259,25 @@ function withDerivedFacts(entry) {
   return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
 }
 
+// The public style draws one version 5 surface file from several released source layers. Group its kinds for the
+// preview only; the changeset still names surface.geojson exactly as the contract does.
+const surfacePreviewGroups = [
+  ['surface-green.geojson', [...surfaceLayerKinds.green, 'shade']],
+  ['surface-water.geojson', surfaceLayerKinds.water],
+  ['surface-frame.geojson', ['context', 'sea']]
+];
+
+function previewFeaturesByFile(featuresByFile) {
+  const surface = featuresByFile.get('surface.geojson');
+  if (!surface) return featuresByFile;
+  featuresByFile.delete('surface.geojson');
+  for (const [filename, kinds] of surfacePreviewGroups) {
+    const features = surface.filter(({properties}) => kinds.includes(properties.kind));
+    if (features.length > 0) featuresByFile.set(filename, features);
+  }
+  return featuresByFile;
+}
+
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context.
 function workingFeatures(displayFeatures) {
@@ -264,7 +289,7 @@ function workingFeatures(displayFeatures) {
     if (featuresByFile.has(filename)) continue;
     featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
-  return featuresByFile;
+  return bundleVersion >= 5 ? previewFeaturesByFile(featuresByFile) : featuresByFile;
 }
 
 function changedFeaturesOf(filename) {
@@ -290,9 +315,11 @@ function markedFeatures() {
 
 function refreshOverlay() {
   clickCandidates = null;
-  activeEntries = activeFilter
+  const layerEntries = activeFilter
     ? activeFilter.entries(behaviorContext())
     : shownFiles().flatMap(filename => session.workingEntries(filename));
+  // One shared file can hold the objects of several layers; only this layer's kinds are its editable objects.
+  activeEntries = entriesForLayer(activeLayer, layerEntries);
   const changedFeatures = new Set(session.changedFiles().flatMap(changedFeaturesOf));
   const stateOf = entry => {
     if (activeFilter) return activeFilter.state;
@@ -302,6 +329,7 @@ function refreshOverlay() {
   const factsOf = entry => ({...levelFacts(entry), ...derivedFacts(entry, entriesOf)});
   const collection = overlayCollection(activeEntries, stateOf, factsOf);
   overlay.setData(collection);
+  overlay.setStoredPositions(bundleVersion >= 5 ? version5StoredPositions(activeEntries) : []);
   overlay.setInteriorsPickable(Boolean(activeFilter));
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
@@ -757,9 +785,12 @@ function selectObject(entry, shouldFocus = false) {
     setStatus(applyOrCancelMessage, true);
     return false;
   }
-  const feature = featureForEntry(entry, session);
+  // A water area whose card belongs to its river opens the river instead, without changing what the map selected.
+  const context = behaviorContext();
+  const selected = behaviorOf(entry.filename, activeLayer.id, bundleVersion).selectionEntry(entry, context);
+  const feature = featureForEntry(selected, session);
   if (!feature) return false;
-  showFeature({...entry, feature});
+  showFeature({...selected, feature});
   if (shouldFocus) elementById('close-inspector').focus();
   return true;
 }
@@ -1024,6 +1055,7 @@ function installMapLayers(visibilityConfig) {
   installPlaces(map, publishedPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
+    basemapLayers: previewLayersFromStyle(map.getStyle().layers, bundleVersion),
     visibilityConfig: placeVisibility,
     publishedPlaces,
     sharedSource: 'editor-source'
@@ -1080,10 +1112,12 @@ async function start() {
     loadJSON('data/editor-layers.json')
   ]);
   sources = bundle;
-  rules = validateLayerRules(layerRules, [...sources.keys()]);
+  bundleVersion = sources.manifest.version;
+  // The rules of the verified version decide what can be edited; a release's top-level set is only for versions 1-4.
+  rules = validateLayerRules(rulesForBundleVersion(layerRules, bundleVersion), [...sources.keys()]);
   rules = {...rules, layers: {...rules.layers, [sketchFile]: sketchRule}};
   rules = {...rules, layers: {...rules.layers, [junctionFile]: junctionRule}};
-  layers = availableLayers([...sources.keys()]);
+  layers = availableLayers([...sources.keys()], bundleVersion);
   await createEditorMap(mapMetadata);
   installMapLayers(visibilityConfig);
   startEditing(visibilityConfig);

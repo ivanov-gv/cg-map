@@ -18,9 +18,15 @@ const sourceLayersByFile = {
   'water.geojson': ['water']
 };
 
-// Maps each source file to the IDs of the published style layers that draw it. EPSG3857-independent: the source
-// layer name is the only link between a reviewed GeoJSON file and a map-core style layer.
-export function basemapLayersFromStyle(layers) {
+// A version 5 surface holds kinds that the released style draws from different source layers. The editor groups them
+// into preview files, so a changed lake is not also painted as land. These are editor view groups, not source files.
+const version5SurfacePreviewLayers = {
+  'surface-green.geojson': ['land', 'green_area_labels', 'protected_areas'],
+  'surface-water.geojson': ['water'],
+  'surface-frame.geojson': ['land']
+};
+
+function layersForFiles(layers, files) {
   const layerIdsBySourceLayer = new Map();
   for (const layer of layers) {
     if (layer.source !== 'basemap' || !layer['source-layer']) continue;
@@ -29,11 +35,23 @@ export function basemapLayersFromStyle(layers) {
     layerIdsBySourceLayer.set(layer['source-layer'], layerIds);
   }
   return Object.fromEntries(
-    Object.entries(sourceLayersByFile)
+    Object.entries(files)
       .map(([filename, sourceLayers]) => [
         filename,
         sourceLayers.flatMap(sourceLayer => layerIdsBySourceLayer.get(sourceLayer) ?? [])
       ])
       .filter(([, layerIds]) => layerIds.length > 0)
   );
+}
+
+// Maps each source file to the IDs of the published style layers that draw it. EPSG3857-independent: the source
+// layer name is the only link between a reviewed GeoJSON file and a map-core style layer.
+export function basemapLayersFromStyle(layers) {
+  return layersForFiles(layers, sourceLayersByFile);
+}
+
+// The extra view groups exist only while a version 5 bundle is open; the released file mapping stays untouched.
+export function previewLayersFromStyle(layers, bundleVersion) {
+  const byFile = basemapLayersFromStyle(layers);
+  return bundleVersion >= 5 ? {...byFile, ...layersForFiles(layers, version5SurfacePreviewLayers)} : byFile;
 }

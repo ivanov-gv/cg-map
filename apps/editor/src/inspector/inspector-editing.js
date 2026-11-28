@@ -98,7 +98,8 @@ export class InspectorEditing {
   }
 
   get #behavior() {
-    return behaviorOf(this.#filename, this.#context.behaviorContext().layer?.id);
+    const context = this.#context.behaviorContext();
+    return behaviorOf(this.#filename, context.layer?.id, context.bundleVersion);
   }
 
   get #isVertexTool() {
@@ -184,7 +185,13 @@ export class InspectorEditing {
   #shapeProblem() {
     const {feature} = this.#transaction;
     const shapeRule = {...this.#rule, properties: {}, requiredAny: undefined};
-    return featureProblem({...feature, properties: {}}, shapeRule, this.#context.levels, this.#baseFeature);
+    return featureProblem(
+      {...feature, properties: {}},
+      shapeRule,
+      this.#context.levels,
+      this.#baseFeature,
+      this.#context.behaviorContext().bundleVersion
+    );
   }
 
   // What the layer would record beside the open edit as it is now, and why it would refuse it.
@@ -360,7 +367,7 @@ export class InspectorEditing {
     const {isNew, feature} = this.#transaction;
     const geometryType = feature.geometry?.type;
     const isShape = Boolean(geometryType) && geometryType !== 'Point';
-    const {canReshape, canDelete} = featureCapabilities(feature, this.#rule);
+    const {canReshape, canDelete} = featureCapabilities(feature, this.#rule, this.#context.behaviorContext().bundleVersion);
     const isReshapableHere = this.#behavior.isReshapable(this.#context.behaviorContext());
     const canEditShape = (isNew || canReshape) && Boolean(geometryType) && isReshapableHere;
     elementById('tool-move').hidden = !canEditShape;
@@ -553,7 +560,13 @@ export class InspectorEditing {
     }
     const behaviorContext = this.#context.behaviorContext();
     const feature = this.#behavior.prepared(this.#currentFeature(), behaviorContext, this.#editContext());
-    const ruleProblem = featureProblem(feature, this.#rule, this.#context.levels, this.#baseFeature);
+    const ruleProblem = featureProblem(
+      feature,
+      this.#rule,
+      this.#context.levels,
+      this.#baseFeature,
+      behaviorContext.bundleVersion
+    );
     const edit = this.#change(feature);
     return {feature, problem: ruleProblem ?? this.#behavior.problem(edit, behaviorContext)};
   }
@@ -590,7 +603,10 @@ export class InspectorEditing {
       if (isUnchanged) continue;
       const operation = {filename, operation: before ? 'modify' : 'add', reference: {localId: key}, before, after};
       const problem = operationProblem(operation, rules, levels);
-      if (problem) return `${behaviorOf(filename).title(after, this.#context.behaviorContext())}: ${problem}.`;
+      if (problem) {
+        const context = this.#context.behaviorContext();
+        return `${behaviorOf(filename, context.layer?.id, context.bundleVersion).title(after, context)}: ${problem}.`;
+      }
     }
     return null;
   }
