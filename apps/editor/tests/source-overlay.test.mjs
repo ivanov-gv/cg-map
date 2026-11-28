@@ -120,6 +120,21 @@ function overlayMap() {
   };
 }
 
+test('new overlay data drops the rendered tiles that still show the old objects', () => {
+  const map = overlayMap();
+  const cleared = [];
+  map.style = {
+    tileManagers: {
+      'editor-source': {clearTiles: () => cleared.push('editor-source')},
+      'editor-source-selection': {clearTiles: () => cleared.push('editor-source-selection')}
+    }
+  };
+  const overlay = createSourceOverlay(map);
+  overlay.setData(overlayCollection([entry('0', stop)]));
+  overlay.setSelection(null);
+  assert.deepEqual(cleared, ['editor-source', 'editor-source-selection']);
+});
+
 test('guides have hollow interiors, and selection keeps its own visibility', () => {
   const map = overlayMap();
   const overlay = createSourceOverlay(map);
