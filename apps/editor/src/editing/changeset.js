@@ -1,7 +1,8 @@
-import {layerIdOfFile} from '../layers/shared/editor-layers.js';
+import {layerIdsForFile} from '../layers/shared/editor-layers.js';
 import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from '../shared/hashing.js';
 import {operationProblem} from '../layers/shared/layer-rules.js';
+import {surfaceResultProblemForEdits} from '../layers/shared/surface-edits.js';
 
 const latestVersion = 2;
 const readableVersions = [1, latestVersion];
@@ -115,7 +116,17 @@ export async function importChangeset(changeset, session, sources, rules, levels
     requireImportable(!problem, problem);
   }
   const edits = operations.map(({filename, after}, index) => ({filename, key: keys[index], after}));
-  const layerIds = [...new Set(operations.map(({filename}) => layerIdOfFile(filename)))];
+  const surfaceProblem = surfaceResultProblemForEdits(
+    session,
+    {entriesOf: filename => session.workingEntries(filename)},
+    edits
+  );
+  requireImportable(!surfaceProblem, `surface.geojson: ${surfaceProblem}`);
+  const bundleVersion = rules.bundleVersion ?? 3;
+  const filenames = [...sources.keys()];
+  const layerIds = [
+    ...new Set(operations.flatMap(({filename}) => layerIdsForFile(filename, bundleVersion, filenames)))
+  ];
   if (edits.length > 0) session.recordEdits(layerIds[0], edits, layerIds);
   fieldItems.forEach(item => session.saveFieldItem(item));
 }

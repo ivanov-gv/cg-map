@@ -119,9 +119,11 @@ function fieldControl(name, value, propertyRule, levels, {controls, usualValues}
 // Values a single field cannot state. Layers edit them with controls of their own.
 const structuredTypes = new Set(['list', 'identifier', 'identifiers', 'directions', 'position', 'positions']);
 
-export function isFormField(propertyRule) {
+export function isFormField(propertyRule, name = null, controls = {}) {
   const isFixed = propertyRule.enum?.length === 1 && !isOnlyYes(propertyRule);
-  return !structuredTypes.has(propertyRule.type) && !propertyRule.reference && !propertyRule.addOnly && !isFixed;
+  // A reference is normally picked elsewhere. A layer that supplies its own control can still offer it as a field.
+  const isUnpickable = propertyRule.reference ? !controls[name] : structuredTypes.has(propertyRule.type);
+  return !isUnpickable && !propertyRule.addOnly && !isFixed;
 }
 
 // One labelled control for a property the rules list.
@@ -153,7 +155,9 @@ export function renderPropertyForm(
   levels,
   {sections = null, controls = {}, usualValues = {}} = {}
 ) {
-  const allowedNames = Object.keys(propertyRules).filter(name => isFormField(propertyRules[name]));
+  const allowedNames = Object.keys(propertyRules).filter(name =>
+    isFormField(propertyRules[name], name, controls)
+  );
   const wantedSections = sections ?? [{title: '', fields: allowedNames}];
   const shownSections = wantedSections
     .map(section => ({...section, fields: section.fields.filter(name => allowedNames.includes(name))}))

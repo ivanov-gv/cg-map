@@ -412,6 +412,7 @@ export class InspectorEditing {
       key: this.#transaction.key,
       filename: this.#filename,
       isNew: this.#transaction.isNew,
+      behavior: this.#behavior,
       context: this.#context.behaviorContext(),
       setProperties: whileOpen(properties => this.#setProperties(properties)),
       extras: this.#transaction.extras,
@@ -611,6 +612,11 @@ export class InspectorEditing {
     return null;
   }
 
+  // Why the file this step would leave cannot be recorded, even when each edit looks sound on its own.
+  #resultProblemOf(edits) {
+    return this.#behavior.resultProblem(edits, this.#context.behaviorContext());
+  }
+
   // Records the edit together with others of the same step.
   #applyWith(extraEdits) {
     if (isDrawing(this.#transaction)) return this.#refuse('Finish drawing first.');
@@ -624,6 +630,8 @@ export class InspectorEditing {
     const edits = [...ownEdits, ...companions, ...extraEdits];
     const invalidEdit = this.#problemOf(edits);
     if (invalidEdit) return this.#refuse(invalidEdit);
+    const resultProblem = this.#resultProblemOf(edits);
+    if (resultProblem) return this.#refuse(resultProblem);
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
@@ -647,6 +655,11 @@ export class InspectorEditing {
     const invalidEdit = this.#problemOf(edits);
     if (invalidEdit) {
       this.#refuse(invalidEdit);
+      return;
+    }
+    const resultProblem = this.#resultProblemOf(edits);
+    if (resultProblem) {
+      this.#refuse(resultProblem);
       return;
     }
     this.#context.commands.recordEdits(edits);
@@ -689,7 +702,14 @@ export class InspectorEditing {
     const ownEdit = {filename: entry.filename, key: entry.key, after: null};
     confirmDeletion({title: `Delete ${title}?`, message, options}, async option => {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);
-      if (optionEdits) this.#recordDeletion([ownEdit, ...edits, ...optionEdits], title);
+      if (!optionEdits) return;
+      const allEdits = [ownEdit, ...edits, ...optionEdits];
+      const resultProblem = this.#resultProblemOf(allEdits);
+      if (resultProblem) {
+        this.#refuse(resultProblem);
+        return;
+      }
+      this.#recordDeletion(allEdits, title);
     });
   }
 

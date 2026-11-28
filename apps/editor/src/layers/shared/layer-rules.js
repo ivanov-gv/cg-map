@@ -1,4 +1,4 @@
-import {derivedGeometryProblem, geometryProblem} from '../../geometry/geometry-validation.js';
+import {derivedGeometryProblem, geometryProblem, isValidCoordinate} from '../../geometry/geometry-validation.js';
 
 // The same checks as data/tools/apply-changeset.mjs, so a refusal happens at the edit and not after the export.
 // The shared fixtures in the pinned @ivanov-gv/map-contracts package and tests/integration keep the two in step; the
@@ -48,10 +48,11 @@ function numberProblem(name, value, propertyRule) {
   const isRightType = propertyRule.type === 'integer' ? Number.isInteger(value) : Number.isFinite(value);
   if (!isRightType) return `${name} must be ${propertyRule.type === 'integer' ? 'a whole number' : 'a number'}`;
   if (value < (propertyRule.minimum ?? -Infinity)) return `${name} is below ${propertyRule.minimum}`;
-  const isAtOrAboveLimit =
-    value > (propertyRule.maximum ?? Infinity) ||
-    (propertyRule.exclusiveMaximum !== undefined && value >= propertyRule.exclusiveMaximum);
-  if (isAtOrAboveLimit) return `${name} is above its limit`;
+  // The inclusive wording is the importer's, so a v1-v4 refusal says the same thing on both sides of the export.
+  if (value > (propertyRule.maximum ?? Infinity)) return `${name} is above ${propertyRule.maximum}`;
+  if (propertyRule.exclusiveMaximum !== undefined && value >= propertyRule.exclusiveMaximum) {
+    return `${name} must be below ${propertyRule.exclusiveMaximum}`;
+  }
   const isOnStep = !propertyRule.multipleOf || value % propertyRule.multipleOf === 0;
   return isOnStep ? null : `${name} must be a multiple of ${propertyRule.multipleOf}`;
 }
@@ -75,17 +76,17 @@ function identifiersProblem(name, value) {
   return areIdentifiers ? null : `${name} must be a list of OSM numbers or local IDs`;
 }
 
-const isCoordinatePair = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
-
-// Stored positions are owner-set facts. The editor moves them; it never derives them from an outline.
+// Stored positions are owner-set facts in WGS84. The editor moves them; it never derives them from an outline.
 function positionProblem(name, value) {
-  return isCoordinatePair(value) ? null : `${name} must be a longitude and a latitude`;
+  return isValidCoordinate(value) ? null : `${name} must be a WGS84 longitude and latitude`;
 }
 
 function positionsProblem(name, value) {
-  const isLine = Array.isArray(value) && value.length > 0 && value.every(isCoordinatePair);
-  return isLine ? null : `${name} must be a line of positions`;
+  const isLine = Array.isArray(value) && value.length >= 2 && value.every(isValidCoordinate);
+  return isLine ? null : `${name} must be at least two WGS84 positions`;
 }
+
+const isCoordinatePair = isValidCoordinate;
 
 // A stop of a route is a stop ID, a positioned stop outside the stop file, or a turn point the route must pass.
 function isRouteStop(stop) {

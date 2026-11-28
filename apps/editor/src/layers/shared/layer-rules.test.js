@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {pinnedContractsRoot} from './pinned-contracts.mjs';
-import {featureCapabilities, operationProblem, propertyProblem, rulesForBundleVersion} from '../src/layers/shared/layer-rules.js';
+import {pinnedContractsRoot} from '../../../tests/pinned-contracts.mjs';
+import {featureCapabilities, operationProblem, propertyProblem, rulesForBundleVersion} from './layer-rules.js';
 
 const contracts = JSON.parse(readFileSync(path.join(pinnedContractsRoot, 'editor-layers.json'), 'utf8'));
 const levels = new Set([1, 2, 3]);
@@ -42,24 +42,26 @@ test('bundle rules come from the verified version, leaving released rules alone'
   assert.throws(() => rulesForBundleVersion(contracts, 6), /do not cover bundle version 6/);
 });
 
-test('a stored point and a stored line are judged by their own type', () => {
+test('a stored point and a stored line are judged by their own WGS84 type', () => {
   const {properties} = rulesForBundleVersion(contracts, 5).layers['surface.geojson'];
   const withKind = values => ({kind: 'park', ...values});
   assert.equal(propertyProblem(withKind({labelPoint: [19.2, 42.4]}), properties, levels), null);
-  for (const bad of [[19.2], '19.2,42.4', [19.2, null]]) {
-    assert.match(propertyProblem(withKind({labelPoint: bad}), properties, levels), /longitude and a latitude/);
+  for (const bad of [[19.2], '19.2,42.4', [19.2, null], [200, 42.4]]) {
+    assert.match(propertyProblem(withKind({labelPoint: bad}), properties, levels), /WGS84 longitude and latitude/);
   }
   assert.equal(propertyProblem(withKind({labelLine: [[19.2, 42.4], [19.3, 42.5]]}), properties, levels), null);
-  for (const bad of [[], [[19.2]], [19.2, 42.4]]) {
-    assert.match(propertyProblem(withKind({labelLine: bad}), properties, levels), /line of positions/);
+  for (const bad of [[], [[19.2]], [19.2, 42.4], [[200, 42.4], [19.3, 42.5]]]) {
+    assert.match(propertyProblem(withKind({labelLine: bad}), properties, levels), /at least two WGS84 positions/);
   }
 });
 
-test('a number with an exclusive maximum stops just below its limit', () => {
-  const rule = {type: 'number', minimum: 0, exclusiveMaximum: 360};
-  assert.equal(propertyProblem({value: 0}, {value: rule}, levels), null);
-  assert.equal(propertyProblem({value: 359.9}, {value: rule}, levels), null);
-  assert.match(propertyProblem({value: 360}, {value: rule}, levels), /above its limit/);
+test('a limit names the actual maximum it refuses, as the importer does', () => {
+  const inclusive = {value: {type: 'number', minimum: 0, maximum: 5}};
+  assert.equal(propertyProblem({value: 5}, inclusive, levels), null);
+  assert.match(propertyProblem({value: 6}, inclusive, levels), /value is above 5/);
+  const exclusive = {value: {type: 'number', minimum: 0, exclusiveMaximum: 360}};
+  assert.equal(propertyProblem({value: 359.9}, exclusive, levels), null);
+  assert.match(propertyProblem({value: 360}, exclusive, levels), /value must be below 360/);
 });
 
 test('facts required or allowed for one kind are not demanded of another', () => {

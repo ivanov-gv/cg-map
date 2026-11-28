@@ -449,6 +449,7 @@ select {
 #layer-switch-dialog,
 #delete-dialog,
 #street-dialog,
+.river-dialog,
 #note-dialog,
 #hours-dialog {
   position: fixed;
@@ -467,10 +468,12 @@ select {
 #layer-switch-dialog::backdrop,
 #delete-dialog::backdrop,
 #street-dialog::backdrop,
+.river-dialog::backdrop,
 #note-dialog::backdrop,
 #hours-dialog::backdrop {
   background: #0006;
 }
+dialog h2,
 dialog h3 {
   margin: 0 0 8px;
   font-size: 14px;

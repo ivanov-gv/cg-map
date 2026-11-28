@@ -32,6 +32,15 @@ export class EditSession {
     return isLocalKey(key) ? null : this.#sources.get(filename).collection.features[Number(key)];
   }
 
+  // The source state of a whole file, as entries, without anything recorded in this session.
+  baseEntries(filename) {
+    return this.#sources.get(filename).collection.features.map((feature, index) => ({
+      filename,
+      key: String(index),
+      feature
+    }));
+  }
+
   // A feature as it stands now, or null when it was deleted or does not exist.
   workingFeature(filename, key) {
     const change = this.#changesOf(filename).get(key);

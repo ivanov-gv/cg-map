@@ -187,4 +187,13 @@ export function layerIdOfFile(filename) {
   return owner?.id ?? filename;
 }
 
+// A file can belong to several layers, as version 5's surface does. A step that changes it goes into the history of every
+// one of them, so it can be taken back while any of those layers is active (ADR 0038).
+export function layerIdsForFile(filename, bundleVersion = 3, filenames = []) {
+  const ids = availableLayers(filenames, bundleVersion)
+    .filter(layer => layerFiles(layer).includes(filename))
+    .map(({id}) => id);
+  return ids.length > 0 ? ids : [layerIdOfFile(filename)];
+}
+
 export const layerFiles = layer => [...layer.files, ...layer.linkedFiles];

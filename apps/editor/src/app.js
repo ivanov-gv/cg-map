@@ -14,7 +14,7 @@ import {derivedFacts} from './source-data/derived-facts.js';
 import {DraftKeeper} from './editing/draft-keeper.js';
 import {createElementWithText, elementById} from './shared/dom.js';
 import {EditSession} from './editing/edit-session.js';
-import {availableLayers, entriesForLayer, surfaceLayerKinds} from './layers/shared/editor-layers.js';
+import {availableLayers, entriesForLayer} from './layers/shared/editor-layers.js';
 import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote} from './editing/field-items.js';
 import {createHandleLayer} from './map-tools/handle-layer.js';
 import {createJointLayer, jointMinZoom} from './layers/shared/joint-layer.js';
@@ -32,7 +32,7 @@ import {
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
 import {bridgeBehaviors} from './layers/roads/layer-bridges.js';
 import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
-import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
+import {buildingAt, placeBehaviors, version5PoiProblem} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
 import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
@@ -44,7 +44,7 @@ import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
 import {stopBehaviors} from './layers/stops/layer-stops.js';
 import {waterBehaviors} from './layers/water/layer-water.js';
-import {registerVersion5Behaviors, version5StoredPositions} from './layers/shared/version5-behaviors.js';
+import {registerVersion5Behaviors} from './layers/shared/version5-behaviors.js';
 import {featureCapabilities, layerLockReason, rulesForBundleVersion, validateLayerRules} from './layers/shared/layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
 import {isMagnetOn} from './map-tools/magnet-switch.js';
@@ -259,37 +259,27 @@ function withDerivedFacts(entry) {
   return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
 }
 
-// The public style draws one version 5 surface file from several released source layers. Group its kinds for the
-// preview only; the changeset still names surface.geojson exactly as the contract does.
-const surfacePreviewGroups = [
-  ['surface-green.geojson', [...surfaceLayerKinds.green, 'shade']],
-  ['surface-water.geojson', surfaceLayerKinds.water],
-  ['surface-frame.geojson', ['context', 'sea']]
-];
-
-function previewFeaturesByFile(featuresByFile) {
-  const surface = featuresByFile.get('surface.geojson');
-  if (!surface) return featuresByFile;
-  featuresByFile.delete('surface.geojson');
-  for (const [filename, kinds] of surfacePreviewGroups) {
-    const features = surface.filter(({properties}) => kinds.includes(properties.kind));
-    if (features.length > 0) featuresByFile.set(filename, features);
-  }
-  return featuresByFile;
-}
-
 // The active layer's files and every changed file use the public cartography with their working features. The others
-// stay as released, for context.
+// stay as released, for context. A behavior can ask for the whole of a shared file regardless of which of its layers
+// is open, so switching layers changes what can be picked without hiding what was already drawn or applied.
 function workingFeatures(displayFeatures) {
   const featuresByFile = new Map();
+  // A behavior that draws a shared file answers for the whole file, before the active layer narrows what can be picked.
+  // Otherwise the partial set below would hide an earlier edit from another layer that owns the same file.
+  for (const filename of sources.keys()) {
+    const behavior = behaviorOf(filename, activeLayer?.id, bundleVersion);
+    const entries = behavior.previewEntries?.(filename, {session, sources});
+    if (entries) featuresByFile.set(filename, entries.map(withDerivedFacts));
+  }
   for (const filename of shownFiles()) {
+    if (featuresByFile.has(filename)) continue;
     featuresByFile.set(filename, displayFeatures.filter(({properties}) => properties.sourceFile === filename));
   }
   for (const filename of session.changedFiles()) {
     if (featuresByFile.has(filename)) continue;
     featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
-  return bundleVersion >= 5 ? previewFeaturesByFile(featuresByFile) : featuresByFile;
+  return featuresByFile;
 }
 
 function changedFeaturesOf(filename) {
@@ -329,7 +319,11 @@ function refreshOverlay() {
   const factsOf = entry => ({...levelFacts(entry), ...derivedFacts(entry, entriesOf)});
   const collection = overlayCollection(activeEntries, stateOf, factsOf);
   overlay.setData(collection);
-  overlay.setStoredPositions(bundleVersion >= 5 ? version5StoredPositions(activeEntries) : []);
+  overlay.setStoredPositions(
+    activeEntries.flatMap(entry =>
+      behaviorOf(entry.filename, activeLayer?.id, bundleVersion).storedPositions([entry])
+    )
+  );
   overlay.setInteriorsPickable(Boolean(activeFilter));
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
@@ -1051,14 +1045,22 @@ async function createEditorMap(mapMetadata) {
 
 function installMapLayers(visibilityConfig) {
   const placeVisibility = parseVisibilityConfig(visibilityConfig);
+  const poiProblem = version5PoiProblem(sources, bundleVersion);
+  if (poiProblem) throw new Error(poiProblem);
   const publishedPlaces = sources.get('places.geojson').collection.features;
+  const previewFeaturesByFile = new Map();
+  for (const filename of sources.keys()) {
+    const behavior = behaviorOf(filename, null, bundleVersion);
+    if (behavior.previewFeatures) previewFeaturesByFile.set(filename, behavior.previewFeatures);
+  }
   installPlaces(map, publishedPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
     basemapLayers: previewLayersFromStyle(map.getStyle().layers, bundleVersion),
     visibilityConfig: placeVisibility,
     publishedPlaces,
-    sharedSource: 'editor-source'
+    sharedSource: 'editor-source',
+    previewFeaturesByFile
   });
   overlay = createSourceOverlay(map);
   jointLayer = createJointLayer(map);

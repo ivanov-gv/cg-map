@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {mapStyle, parseVisibilityConfig} from '@ivanov-gv/map-core';
 import {installInspectionLayers} from '../source-data/inspection-layers.js';
-import {basemapLayersFromStyle, previewLayersFromStyle} from './basemap-layers.js';
+import {basemapLayersFromStyle, previewLayersFromStyle, surfacePreviewFeatures} from './basemap-layers.js';
 import {WorkingMap, hiddenLayerFilter, previewLayers} from './working-map.js';
 
 const visibilityConfig = parseVisibilityConfig(
@@ -183,15 +183,53 @@ test('bridge decks and railways are previewed from the style layers map-core pub
   ]);
 });
 
-test('a version 5 surface preview reuses the published land, park, protected-area and water layers', () => {
+test('a version 5 surface preview reuses the published layers for the whole file', () => {
   const byFile = previewLayersFromStyle(publishedStyle.layers, 5);
-  assert.ok(byFile['surface-green.geojson'].includes('land'));
-  assert.ok(byFile['surface-green.geojson'].includes('meadows'));
-  assert.ok(byFile['surface-green.geojson'].includes('park-names'));
-  assert.ok(byFile['surface-green.geojson'].includes('protected-areas'));
-  assert.ok(byFile['surface-water.geojson'].includes('rivers'));
-  assert.ok(byFile['surface-frame.geojson'].includes('land'));
-  assert.equal(previewLayersFromStyle(publishedStyle.layers, 3)['surface-green.geojson'], undefined);
+  const surfaceLayers = byFile['surface.geojson'];
+  for (const id of ['land', 'meadows', 'park-names', 'protected-areas', 'water', 'rivers']) {
+    assert.ok(surfaceLayers.includes(id), `${id} draws the stored surface`);
+  }
+  assert.equal(byFile['surface-green.geojson'], undefined, 'there are no synthetic surface files');
+  assert.equal(byFile['surface-water.geojson'], undefined);
+  assert.equal(byFile['surface-frame.geojson'], undefined);
+  assert.equal(previewLayersFromStyle(publishedStyle.layers, 3)['surface.geojson'], undefined);
+});
+
+test('a version 5 surface gets one source per published layer, each drawn from the whole file', () => {
+  const map = fakeMap(publishedStyle.layers);
+  const preview = new WorkingMap({
+    map,
+    visibilityConfig,
+    publishedPlaces: [],
+    previewFeaturesByFile: new Map([['surface.geojson', surfacePreviewFeatures]])
+  });
+  const park = {
+    type: 'Feature',
+    properties: {kind: 'park', labelLine: [[19.26, 42.44], [19.27, 42.44]]},
+    geometry: geometryOf('Polygon')
+  };
+  const municipality = {
+    type: 'Feature',
+    properties: {kind: 'municipality', labelPoint: [19.3, 42.4]},
+    geometry: geometryOf('Polygon')
+  };
+  const lake = {type: 'Feature', properties: {kind: 'lake', iconPoint: [19.35, 42.45]}, geometry: geometryOf('Polygon')};
+  const sea = {type: 'Feature', properties: {kind: 'sea'}, geometry: geometryOf('Polygon')};
+  preview.show(new Map([['surface.geojson', [park, municipality, lake, sea]]]));
+
+  const drawn = publishedId => map.sources[`edit-preview-surface.geojson-${publishedId}`].data.features;
+  assert.deepEqual(drawn('land'), [park, municipality], 'municipalities are land, not dropped');
+  assert.deepEqual(drawn('meadows'), [park, municipality]);
+  assert.deepEqual(drawn('water'), [lake, sea], 'the sea is water, not land fill');
+  assert.deepEqual(drawn('rivers'), [lake, sea]);
+  assert.deepEqual(drawn('protected-areas'), []);
+  assert.deepEqual(drawn('park-names'), [{...park, geometry: {type: 'LineString', coordinates: park.properties.labelLine}}]);
+  assert.equal(map.sources['edit-preview-surface.geojson'], undefined, 'there is no single filtered copy');
+
+  preview.show(new Map([['surface.geojson', [park, municipality, lake, sea]]]));
+  assert.deepEqual(drawn('land'), [park, municipality], 'a later layer keeps the earlier working file');
+  preview.hide();
+  assert.equal(map.sources['edit-preview-surface.geojson-land'], undefined);
 });
 
 test('a changed file is drawn from its working features below its hidden published layers, and comes back on hide', () => {

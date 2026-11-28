@@ -2,6 +2,10 @@
 // (data/tools/tile-layers.mjs); the Editor keeps no copy of map-core's paint, layout, filters or zoom ranges. It finds
 // the actual style layers on the map at runtime, so a style change cannot leave an edit without its public look.
 // A file absent from this table has no public vector layer: its inspection layer draws it while it is being edited.
+import {frameKinds, greenAreaKinds, waterAreaKinds, waterLineKinds} from '../layers/shared/surface-edits.js';
+
+const surfaceFile = 'surface.geojson';
+const labelFrameKinds = frameKinds.filter(kind => kind !== 'sea');
 const sourceLayersByFile = {
   'bridges.geojson': ['bridges'],
   'buildings.geojson': ['buildings'],
@@ -14,16 +18,28 @@ const sourceLayersByFile = {
   'railways.geojson': ['railways'],
   'roads.geojson': ['roads'],
   'slopes.geojson': ['slopes'],
+  [surfaceFile]: [
+    'land', 'green_area_labels', 'surface_labels', 'protected_areas', 'shades', 'poi_labels', 'water'
+  ],
   'summits.geojson': ['summits'],
   'water.geojson': ['water']
 };
 
-// A version 5 surface holds kinds that the released style draws from different source layers. The editor groups them
-// into preview files, so a changed lake is not also painted as land. These are editor view groups, not source files.
-const version5SurfacePreviewLayers = {
-  'surface-green.geojson': ['land', 'green_area_labels', 'protected_areas'],
-  'surface-water.geojson': ['water'],
-  'surface-frame.geojson': ['land']
+// One surface file feeds several source layers. The kind decides which public layer draws it, and only the selection
+// code filters kinds by the active layer. The pinned core has no shades or settlement-label layer; keeping their source
+// layer names in this table lets a core that publishes them draw the stored facts without another editor mapping.
+const surfaceKindsBySourceLayer = {
+  land: [...greenAreaKinds, ...labelFrameKinds],
+  protected_areas: ['protected-area'],
+  shades: ['shade'],
+  water: [...waterAreaKinds, ...waterLineKinds, 'sea'],
+  surface_labels: labelFrameKinds,
+  poi_labels: ['lake']
+};
+const storedGeometryBySourceLayer = {
+  green_area_labels: 'labelLine',
+  surface_labels: 'labelPoint',
+  poi_labels: 'iconPoint'
 };
 
 function layersForFiles(layers, files) {
@@ -50,8 +66,24 @@ export function basemapLayersFromStyle(layers) {
   return layersForFiles(layers, sourceLayersByFile);
 }
 
-// The extra view groups exist only while a version 5 bundle is open; the released file mapping stays untouched.
+// A version 5 bundle has no synthetic preview files: the real surface file reaches every public surface layer.
 export function previewLayersFromStyle(layers, bundleVersion) {
   const byFile = basemapLayersFromStyle(layers);
-  return bundleVersion >= 5 ? {...byFile, ...layersForFiles(layers, version5SurfacePreviewLayers)} : byFile;
+  return bundleVersion >= 5 ? byFile : Object.fromEntries(Object.entries(byFile).filter(([filename]) => filename !== surfaceFile));
+}
+
+// A label is stored on the object, not derived into its own file. Give the public symbol layer that stored geometry, so
+// a moved label point or line is drawn where the source says it is. Every other layer draws the object's own geometry.
+export function surfacePreviewFeatures(publishedLayer, features) {
+  const sourceLayer = publishedLayer['source-layer'];
+  const kinds = surfaceKindsBySourceLayer[sourceLayer];
+  const drawn = kinds ? features.filter(({properties}) => kinds.includes(properties.kind)) : features;
+  const field = storedGeometryBySourceLayer[sourceLayer];
+  if (!field) return drawn;
+  return drawn.flatMap(feature => {
+    const coordinates = feature.properties[field];
+    const isCompleteLine = field !== 'labelLine' || (Array.isArray(coordinates) && coordinates.length >= 2);
+    if (!isCompleteLine || !coordinates) return [];
+    return [{...feature, geometry: {type: field === 'labelLine' ? 'LineString' : 'Point', coordinates}}];
+  });
 }

@@ -29,6 +29,7 @@ import {
   layerLockReason,
   operationProblem,
   propertyProblem,
+  rulesForBundleVersion,
   validateLayerRules
 } from '../src/layers/shared/layer-rules.js';
 
@@ -279,6 +280,68 @@ test('an import over several layers is taken back and made again as a whole', as
     assert.ok(desks.redo('addresses'));
     assert.equal(desks.changeCount(), 3);
   }
+});
+
+test('a version 5 import judges the whole surface before recording it', async () => {
+  const version5Rules = rulesForBundleVersion(rules, 5);
+  const inner = [
+    [19.2502, 42.4402],
+    [19.2504, 42.4402],
+    [19.2504, 42.4404],
+    [19.2502, 42.4404],
+    [19.2502, 42.4402]
+  ];
+  const park = {
+    type: 'Feature',
+    properties: {kind: 'park', name: 'Grove', entityId: 'way/50'},
+    geometry: {type: 'Polygon', coordinates: [square]}
+  };
+  const shade = {
+    type: 'Feature',
+    properties: {kind: 'shade', greenAreaEntityId: 'way/50'},
+    geometry: {type: 'Polygon', coordinates: [inner]}
+  };
+  const sources = sourcesWith({'surface.geojson': [park, shade]});
+  const session = new EditSession(sources);
+  session.recordEdit('surface.geojson', 'local:second', {
+    type: 'Feature',
+    properties: {kind: 'shade', greenAreaEntityId: 'way/50'},
+    geometry: {type: 'Polygon', coordinates: [inner]}
+  });
+  const changeset = await buildChangeset(session, sources, envelope, version5Rules);
+  const target = new EditSession(sources);
+  await assert.rejects(
+    importChangeset(changeset, target, sources, version5Rules, levels),
+    /surface.geojson: This green area already has a shade/
+  );
+  assert.deepEqual(target.changedFiles(), [], 'a refused resulting file leaves the session untouched');
+});
+
+test('an imported surface step can be taken back from every layer that draws it', async () => {
+  const version5Rules = rulesForBundleVersion(rules, 5);
+  const park = {
+    type: 'Feature',
+    properties: {kind: 'park', name: 'Grove', entityId: 'way/50'},
+    geometry: {type: 'Polygon', coordinates: [square]}
+  };
+  const sources = sourcesWith({'surface.geojson': [park]});
+  const session = new EditSession(sources);
+  session.recordEdit('surface.geojson', '0', renamed(park, 'Renamed grove'));
+  const changeset = await buildChangeset(session, sources, envelope, version5Rules);
+  const desk = new EditSession(sources);
+  await importChangeset(changeset, desk, sources, version5Rules, levels);
+  const name = () => desk.workingEntries('surface.geojson')[0].feature.properties.name;
+  assert.equal(name(), 'Renamed grove');
+  for (const layerId of ['green', 'water', 'settlements']) {
+    assert.ok(desk.canUndo(layerId), `${layerId} holds the imported step`);
+  }
+  assert.ok(desk.undo('water'));
+  assert.equal(name(), 'Grove');
+  assert.equal(desk.canUndo('green'), false, 'the shared step left the other histories too');
+  assert.ok(desk.canRedo('green'));
+  assert.ok(desk.redo('green'));
+  assert.equal(name(), 'Renamed grove');
+  assert.equal(desk.canRedo('settlements'), false);
 });
 
 test('an import is refused whole when the snapshot, fingerprint or rules disagree', async () => {

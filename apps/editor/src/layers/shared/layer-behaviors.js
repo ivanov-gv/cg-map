@@ -28,6 +28,10 @@ import {kindLabel, objectName} from './object-names.js';
 //   selectionEntry(entry, context)              the entry whose card a click really opens, such as a linked river
 //   prepared(feature, context, edit)            the feature as Apply will record it
 //   problem(change, context)                    why Apply must refuse it, or null
+//   resultProblem(edits, context)               why the file Apply would leave is inconsistent, or null
+//   previewEntries(filename, context)           the whole working file to draw when a behavior owns a shared file, or null
+//   previewFeatures(filename, layer, features)  the features one published layer draws from that file, or null
+//   storedPositions(entries)                    guide geometry for owner-set positions stored on those entries
 //   companionEdits(change, context)             edits of linked files that belong to it, [{filename, key, after}]
 //   record({key, feature}, context)             keeps the object somewhere else than in a source file
 //   applyLabel(edit)                            what Apply is called
@@ -52,7 +56,7 @@ export function registerBehaviors(behaviorByFile, layerId = null, bundleVersion 
   }
 }
 
-const defaultBehavior = (filename, layerId, bundleVersion) => ({
+export const defaultBehavior = (filename, layerId, bundleVersion) => ({
   kind: () => kindLabel(filename),
   title: feature => objectName(feature, filename),
   overlapTitle: (feature, context) => behaviorOf(filename, layerId, bundleVersion).title(feature, context),
@@ -61,12 +65,19 @@ const defaultBehavior = (filename, layerId, bundleVersion) => ({
   renderExtras: () => {},
   prepared: feature => feature,
   problem: () => null,
+  resultProblem: () => null,
+  previewEntries: null,
+  previewFeatures: null,
+  storedPositions: () => [],
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
   controls: () => ({}),
   vertexTools: () => [],
   joinsLines: false,
+  snappedPoint: () => null,
+  limitedGeometry: geometry => geometry,
+  closesLines: false,
   joinedPoints: () => [],
   marks: () => [],
   isDerived: false,

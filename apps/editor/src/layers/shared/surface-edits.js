@@ -1,18 +1,22 @@
-// Version 5 surface facts: a stored position stays stored, a shade stays inside its own green area, a water area opens
-// the river card, and a shared municipal edge moves every polygon that holds it in one step.
-import {pointInsidePolygon} from '../../geometry/geometry-validation.js';
-import {interiorPoint} from '../../geometry/interior-point.js';
+// Version 5 surface facts: a stored position stays stored, a shade stays inside the area its owner drew it in, a water
+// area names a waterway in the same file, and every polygon holding a shared frame edge moves in one step.
+import {
+  isValidCoordinate,
+  pointInsidePolygon,
+  pointTouchesSegment,
+  segmentsIntersect
+} from '../../geometry/geometry-validation.js';
 import {changedStretch, followingEdits} from '../../geometry/shared-shapes.js';
 
 export const greenAreaKinds = [
   'park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground'
 ];
-const waterLineKinds = ['river', 'stream', 'canal', 'ditch', 'drain'];
+export const frameKinds = ['municipality', 'context', 'sea'];
+export const waterAreaKinds = ['lake', 'reservoir', 'pond', 'basin', 'water'];
+export const waterLineKinds = ['river', 'stream', 'canal', 'ditch', 'drain'];
 const surfaceFile = 'surface.geojson';
 const storedPositionFields = ['labelPoint', 'labelLine', 'iconPoint'];
 const sharedEdgeToleranceMetres = 1;
-
-const isCoordinatePair = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
 
 const polygonsOf = geometry => {
   if (!geometry) return [];
@@ -20,93 +24,308 @@ const polygonsOf = geometry => {
   return geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
 };
 
-// One exterior ring per polygon, so a MultiPolygon municipality can share more than one border.
-const outerRingsOf = geometry =>
-  polygonsOf(geometry)
-    .map(rings => rings[0])
-    .filter(Boolean);
-
-function changedStretches(before, after) {
-  const previous = outerRingsOf(before);
-  return previous.flatMap((ring, index) => {
-    const stretch = changedStretch(ring, outerRingsOf(after)[index] ?? ring);
-    return stretch ? [stretch] : [];
-  });
-}
-
+const ringsOf = geometry => polygonsOf(geometry).flat();
+const isAreaShape = geometry => ['Polygon', 'MultiPolygon'].includes(geometry?.type);
+const isFrameKind = kind => frameKinds.includes(kind);
+const isSamePoint = (first, second) => JSON.stringify(first) === JSON.stringify(second);
 const entryId = ({key, feature}) => feature.properties.entityId ?? key;
+const segmentsOf = rings => rings.flatMap(ring => ring.slice(1).map((end, index) => [ring[index], end]));
+const segmentKey = segment => segment.map(String).sort().join('|');
+const keysOf = geometry => new Set(segmentsOf(ringsOf(geometry)).map(segmentKey));
 
 const linkedEntry = (entries, entityId) =>
   entityId === undefined ? undefined : entries.find(entry => entryId(entry) === entityId);
 
-const isInsideAnyPolygon = (point, polygons) =>
-  polygons.some(rings => pointInsidePolygon(point, rings));
+// One moved vertex can be on several shared frame edges. Keeping its own anchored stretch for each changed run lets
+// every neighbour of that step follow, rather than merging distant changes into one stretch no outline runs along.
+function changedRuns(before, after) {
+  if (before.length !== after.length) {
+    const stretch = changedStretch(before, after);
+    return stretch ? [stretch] : [];
+  }
+  const changed = before
+    .map((point, index) => (isSamePoint(point, after[index]) ? null : index))
+    .filter(index => index !== null);
+  if (changed.length === 0) return [];
+  const runs = [];
+  let first = changed[0];
+  let last = first;
+  for (const index of changed.slice(1)) {
+    if (index !== last + 1) {
+      runs.push([first, last]);
+      first = index;
+    }
+    last = index;
+  }
+  runs.push([first, last]);
+  return runs.map(([start, end]) => {
+    const from = Math.max(0, start - 1);
+    const to = Math.min(before.length, end + 2);
+    return {before: before.slice(from, to), after: after.slice(from, to)};
+  });
+}
 
-// A shade is optional, but once stored it belongs to exactly one green area and lies wholly inside it.
+function changedStretches(before, after) {
+  const previous = ringsOf(before);
+  const following = ringsOf(after);
+  return previous.flatMap((ring, index) => changedRuns(ring, following[index] ?? ring));
+}
+
+function edgesByKey(entries) {
+  const edges = new Map();
+  for (const entry of entries.filter(({feature}) => isFrameKind(feature.properties.kind))) {
+    for (const segment of segmentsOf(ringsOf(entry.feature.geometry))) {
+      const key = segmentKey(segment);
+      edges.set(key, [...(edges.get(key) ?? []), {entry, segment}]);
+    }
+  }
+  return edges;
+}
+
+const sameOwners = (edges, key, owners) => {
+  const found = (edges.get(key) ?? []).map(({entry}) => entry.key);
+  return found.length === owners.length && owners.every(owner => found.includes(owner));
+};
+
+const crossProduct = (start, end, point) =>
+  (end[0] - start[0]) * (point[1] - start[1]) - (end[1] - start[1]) * (point[0] - start[0]);
+
+const isWholeSegment = ([firstStart, firstEnd], [secondStart, secondEnd]) =>
+  pointTouchesSegment(firstStart, firstEnd, secondStart) &&
+  pointTouchesSegment(firstStart, firstEnd, secondEnd) &&
+  pointTouchesSegment(secondStart, secondEnd, firstStart) &&
+  pointTouchesSegment(secondStart, secondEnd, firstEnd);
+
+const isInteriorToSegment = (segment, point) =>
+  pointTouchesSegment(...segment, point) && !segment.some(end => isSamePoint(end, point));
+
+// Two frame edges may meet at a corner, but a crossing or a partly shared edge leaves an overlap or a gap.
+function isAllowedEdgeContact(first, second) {
+  if (isWholeSegment(first, second)) return true;
+  const properCross =
+    crossProduct(...first, second[0]) * crossProduct(...first, second[1]) < 0 &&
+    crossProduct(...second, first[0]) * crossProduct(...second, first[1]) < 0;
+  if (properCross) return false;
+  const shareCorner = first.some(start => second.some(end => isSamePoint(start, end)));
+  return shareCorner && ![...first, ...second].some((point, index) => isInteriorToSegment(index < 2 ? second : first, point));
+}
+
+function boundaryPoint(point, ring) {
+  return ring.slice(1).some((end, index) => pointTouchesSegment(ring[index], end, point));
+}
+
+function pointInArea(point, polygons) {
+  return polygons.some(rings => pointInsidePolygon(point, rings) || boundaryPoint(point, rings[0]));
+}
+
+// An edge may run along an outer boundary, but crossing or even following a hole takes it outside the green area.
+function edgeStaysInside(start, end, polygons) {
+  return polygons.every(rings => {
+    const [outer, ...holes] = rings;
+    const outerIsClear = outer.slice(1).every((second, index) => {
+      const first = outer[index];
+      return (
+        !segmentsIntersect(start, end, first, second) ||
+        (pointTouchesSegment(first, second, start) && pointTouchesSegment(first, second, end))
+      );
+    });
+    const holesAreClear = holes.every(hole =>
+      hole.slice(1).every((second, index) => !segmentsIntersect(start, end, hole[index], second))
+    );
+    return outerIsClear && holesAreClear;
+  });
+}
+
+function shadeStaysInside(feature, area) {
+  const areaPolygons = polygonsOf(area.feature.geometry);
+  return polygonsOf(feature.geometry).every(rings =>
+    rings.every(
+      ring =>
+        ring.every(point => pointInArea(point, areaPolygons)) &&
+        ring.slice(1).every((end, index) => edgeStaysInside(ring[index], end, areaPolygons))
+    )
+  );
+}
+
+// A shade is optional, but once stored it belongs to exactly one green area and lies wholly inside it. The entries are
+// the resulting file, so a moved or retyped area is judged with its shade still in place.
 export function shadeProblem({key, feature}, context) {
   if (feature.properties.kind !== 'shade') return null;
-  if (feature.geometry?.type !== 'MultiPolygon') return 'A shade must be a MultiPolygon.';
-  const {greenAreaEntityId} = feature.properties;
+  if (!isAreaShape(feature.geometry)) return 'A shade needs an area.';
   const entries = context.entriesOf(surfaceFile);
+  const {greenAreaEntityId} = feature.properties;
   const area = linkedEntry(entries, greenAreaEntityId);
   if (!area || !greenAreaKinds.includes(area.feature.properties.kind)) {
     return 'A shade must name a green area in this file.';
   }
+  const ownId = feature.properties.entityId ?? key;
   const hasOtherShade = entries.some(
     entry =>
-      entry.key !== key &&
+      entryId(entry) !== ownId &&
       entry.feature.properties.kind === 'shade' &&
       entry.feature.properties.greenAreaEntityId === greenAreaEntityId
   );
   if (hasOtherShade) return 'This green area already has a shade.';
-  const areaPolygons = polygonsOf(area.feature.geometry);
-  const isOutside = polygonsOf(feature.geometry).some(polygon =>
-    polygon.some(ring => ring.some(point => !isInsideAnyPolygon(point, areaPolygons)))
-  );
-  return isOutside ? 'A shade must stay inside its green area.' : null;
+  return shadeStaysInside(feature, area) ? null : 'A shade must stay inside its green area.';
 }
 
-// A new shade is seeded well inside the picked area, so the first Apply is valid and its shape can then be edited.
-export function shadeForArea(entry) {
-  const {feature} = entry;
-  if (!greenAreaKinds.includes(feature.properties.kind)) return null;
-  const polygons = polygonsOf(feature.geometry).filter(rings => rings.length > 0);
-  if (polygons.length === 0) return null;
-  const rings = polygons[0];
-  const centre = interiorPoint(rings);
-  const insideRings = rings.map(ring =>
-    ring.map(point => point.map((value, axis) => centre[axis] + (value - centre[axis]) * 0.5))
-  );
-  if (!insideRings.every(ring => ring.every(point => pointInsidePolygon(point, rings)))) return null;
-  return {
-    type: 'Feature',
-    properties: {kind: 'shade', greenAreaEntityId: entryId(entry)},
-    geometry: {type: 'MultiPolygon', coordinates: [insideRings]}
-  };
+// The facts a new shade starts with. Its owner draws the shape; the editor never stores a scaled copy of the area.
+export function shadeSeed(entry) {
+  if (!greenAreaKinds.includes(entry.feature.properties.kind) || !isAreaShape(entry.feature.geometry)) return null;
+  return {kind: 'shade', greenAreaEntityId: entryId(entry)};
 }
 
-// The card of a water area is the card of the river line it links to.
+// The card of a water area is the card of the waterway line it links to, never of another area.
 export function linkedSelection(entry, context) {
   const {kind, riverEntityId} = entry.feature.properties;
-  if (!['lake', 'reservoir', 'pond', 'basin', 'water'].includes(kind) || riverEntityId === undefined) return entry;
+  if (!waterAreaKinds.includes(kind) || riverEntityId === undefined) return entry;
   const river = linkedEntry(context.entriesOf(surfaceFile), riverEntityId);
-  return river && waterLineKinds.includes(river.feature.properties.kind) ? river : entry;
+  if (!river || !waterLineKinds.includes(river.feature.properties.kind)) return entry;
+  return river.feature.geometry?.type === 'LineString' ? river : entry;
 }
 
-// Every outline that runs along a changed municipal edge is spliced into the same changeset.
+// Kind and geometry are one decision: a line cannot become a lake, and a frame kind cannot be invented by retyping.
+export function surfaceKindProblem({feature, before}, context) {
+  const {kind} = feature.properties;
+  const shape = feature.geometry?.type;
+  if (before && isFrameKind(before.properties.kind) !== isFrameKind(kind)) {
+    return `${kind} cannot be changed from ${before.properties.kind}.`;
+  }
+  const expectsArea = isFrameKind(kind) || greenAreaKinds.includes(kind) || waterAreaKinds.includes(kind) ||
+    kind === 'protected-area';
+  if ((expectsArea || kind === 'shade') && !isAreaShape(feature.geometry)) return `${kind} needs an area.`;
+  if (waterLineKinds.includes(kind) && shape !== 'LineString') return `${kind} needs a line.`;
+  const {riverEntityId} = feature.properties;
+  if (riverEntityId === undefined) return null;
+  const river = linkedEntry(context.entriesOf(surfaceFile), riverEntityId);
+  if (!waterAreaKinds.includes(kind) || !isAreaShape(feature.geometry)) return 'A river link belongs to a water area.';
+  return river && waterLineKinds.includes(river.feature.properties.kind) && river.feature.geometry?.type === 'LineString'
+    ? null
+    : 'A river link must name a waterway in this file.';
+}
+
+function positionProblems(feature) {
+  for (const field of storedPositionFields) {
+    const value = feature.properties[field];
+    if (value === undefined) continue;
+    if (field === 'labelLine') {
+      if (!Array.isArray(value) || value.length < 2 || !value.every(isValidCoordinate)) {
+        return 'labelLine needs at least two WGS84 positions.';
+      }
+    } else if (!isValidCoordinate(value)) {
+      return `${field} must be a WGS84 longitude and latitude.`;
+    }
+  }
+  if (feature.properties.kind === 'lake' && feature.properties.iconPoint !== undefined) {
+    if (!pointInArea(feature.properties.iconPoint, polygonsOf(feature.geometry))) {
+      return 'A lake icon must stay inside its lake.';
+    }
+  }
+  return null;
+}
+
+// Every edit path judges its own feature against the file it would leave behind.
+export function surfaceEditProblem(change, context) {
+  return surfaceKindProblem(change, context) ?? shadeProblem(change, context) ?? positionProblems(change.feature);
+}
+
+// The result of the pending edits, without recording them. An open edit is overlaid on what the session already holds.
+export function resultingEntries(change, context, extraEdits = []) {
+  const entries = new Map(
+    context
+      .entriesOf(surfaceFile)
+      .filter(entry => entry.filename === surfaceFile)
+      .map(entry => [entry.key, {...entry}])
+  );
+  for (const edit of [change, ...extraEdits]) {
+    if (!edit || edit.filename && edit.filename !== surfaceFile) continue;
+    if (edit.after === null) entries.delete(edit.key);
+    else {
+      entries.set(edit.key, {
+        filename: surfaceFile,
+        key: edit.key,
+        // The edit carries the whole feature. Merging the old properties on top would keep a value it removed.
+        feature: {...edit.after, properties: {...edit.after.properties}}
+      });
+    }
+  }
+  return [...entries.values()];
+}
+
+// An edge the reviewed source shared must stay shared by the same features. A one-sided move leaves a gap.
+function hasBrokenBaseEdge(entries, baseEntries) {
+  const baseEdges = edgesByKey(baseEntries);
+  const resultEdges = edgesByKey(entries);
+  const resultByKey = new Map(entries.map(entry => [entry.key, entry]));
+  for (const [sharedKey, base] of baseEdges) {
+    const owners = base.map(({entry}) => entry.key);
+    if (owners.length < 2) continue;
+    if (sameOwners(resultEdges, sharedKey, owners)) continue;
+    const lostByOneOwner = owners.some(owner => (resultEdges.get(sharedKey) ?? []).some(({entry}) => entry.key === owner));
+    if (lostByOneOwner) return true;
+    const newKeysFor = owner =>
+      [...keysOf(resultByKey.get(owner)?.feature.geometry)].filter(key => !baseEdges.has(key));
+    const replacements = owners.map(newKeysFor);
+    const common = replacements[0].filter(key =>
+      replacements.slice(1).every(other => other.includes(key)) && sameOwners(resultEdges, key, owners)
+    );
+    if (common.length === 0) return true;
+  }
+  return false;
+}
+
+function hasPartialSharedEdge(entries) {
+  const edges = [...edgesByKey(entries).values()].flat();
+  for (const [index, first] of edges.entries()) {
+    for (const second of edges.slice(index + 1)) {
+      if (first.entry.key === second.entry.key) continue;
+      if (!segmentsIntersect(...first.segment, ...second.segment)) continue;
+      if (!isAllowedEdgeContact(first.segment, second.segment)) return true;
+    }
+  }
+  return false;
+}
+
+// The whole frame must come out of an edit without gaps, overlaps or one-sided moves.
+export function frameTopologyProblem(entries, baseEntries = entries) {
+  if (hasBrokenBaseEdge(entries, baseEntries)) return 'A shared frame edge was moved on only one side.';
+  return hasPartialSharedEdge(entries) ? 'Frame polygons overlap along part of an edge.' : null;
+}
+
+// Checks every feature of the resulting file, including links and uniqueness that one open edit cannot see alone.
+export function surfaceResultProblem(entries, baseEntries = entries) {
+  const context = {entriesOf: filename => (filename === surfaceFile ? entries : [])};
+  const baseByKey = new Map(baseEntries.map(entry => [entry.key, entry]));
+  for (const entry of entries) {
+    const problem = surfaceEditProblem({...entry, before: baseByKey.get(entry.key)?.feature ?? null}, context);
+    if (problem) return problem;
+  }
+  return frameTopologyProblem(entries, baseEntries);
+}
+
+// Apply, delete and import all use this: the file the step would leave, judged once against the reviewed source.
+export function surfaceResultProblemForEdits(session, context, edits) {
+  const surfaceEdits = edits.filter(({filename}) => filename === surfaceFile);
+  if (surfaceEdits.length === 0) return null;
+  const [change, ...extraEdits] = surfaceEdits;
+  return surfaceResultProblem(resultingEntries(change, context, extraEdits), session.baseEntries(surfaceFile));
+}
+
+// Every outline that runs along a changed frame edge is spliced into the same changeset, including holes, neighbours
+// and the sea. All rings are searched, not just municipality exteriors.
 export function municipalityCompanions({key, feature, before}, context) {
-  if (!before || feature.properties.kind !== 'municipality') return [];
+  if (!before || !isFrameKind(feature.properties.kind)) return [];
   const stretches = changedStretches(before.geometry, feature.geometry);
   if (stretches.length === 0) return [];
   const neighbours = context
     .entriesOf(surfaceFile)
-    .filter(entry => entry.key !== key && entry.feature.properties.kind === 'municipality');
+    .filter(entry => entry.key !== key && isFrameKind(entry.feature.properties.kind));
   const editsByKey = new Map();
   for (const stretch of stretches) {
-    const candidates = neighbours.map(({filename, key: neighbourKey, feature: neighbour}) => ({
-      filename,
-      key: neighbourKey,
-      feature: editsByKey.get(neighbourKey)?.after ?? neighbour
+    const candidates = neighbours.map(neighbour => ({
+      filename: neighbour.filename,
+      key: neighbour.key,
+      feature: editsByKey.get(neighbour.key)?.after ?? neighbour.feature
     }));
     for (const edit of followingEdits(candidates, stretch, sharedEdgeToleranceMetres)) {
       editsByKey.set(edit.key, edit);
@@ -121,10 +340,10 @@ export function storedPositionFeatures(entries) {
     storedPositionFields.flatMap(field => {
       const value = feature.properties[field];
       const geometry = field === 'labelLine'
-        ? Array.isArray(value) && value.length > 0 && value.every(isCoordinatePair)
+        ? Array.isArray(value) && value.length >= 2 && value.every(isValidCoordinate)
           ? {type: 'LineString', coordinates: value}
           : null
-        : isCoordinatePair(value)
+        : isValidCoordinate(value)
           ? {type: 'Point', coordinates: value}
           : null;
       return geometry ? [{type: 'Feature', properties: {field, key, sourceFile: filename}, geometry}] : [];

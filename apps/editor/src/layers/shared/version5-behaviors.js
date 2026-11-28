@@ -1,17 +1,18 @@
 // Version 5 keeps the released behavior hooks away from files whose fields have changed, then adds the surface's own
-// behavior. Nothing here invents a stored value: a new shade is only seeded inside the area it belongs to.
-import {isArea} from '../../geometry/area-magnet.js';
-import {routeBehaviors} from '../routes/layer-routes.js';
-import {registerBehaviors} from './layer-behaviors.js';
-import {kindLabel, objectName} from './object-names.js';
+// behavior. Nothing here invents a stored value: someone draws a shade at its place and picks a river from the file.
+import {riverField} from '../water/river-picker.js';
+import {version5RouteBehaviors} from '../routes/layer-routes.js';
+import {surfacePreviewFeatures} from '../../map-tools/basemap-layers.js';
+import {defaultBehavior, registerBehaviors} from './layer-behaviors.js';
 import {
   greenAreaKinds,
   linkedSelection,
-  movedStoredValue,
   municipalityCompanions,
-  shadeForArea,
-  shadeProblem,
-  storedPositionFeatures
+  movedStoredValue,
+  shadeSeed,
+  storedPositionFeatures,
+  surfaceEditProblem,
+  surfaceResultProblemForEdits
 } from './surface-edits.js';
 
 const surfaceFile = 'surface.geojson';
@@ -29,58 +30,28 @@ const version5Files = [
   'transit-network.json'
 ];
 
-// transit-routes.json keeps its released behavior: its contract and route hooks are unchanged in version 5.
 const storedTools = {
   labelPoint: {label: 'Move label point', prompt: 'Where should the label point go?'},
   labelLine: {label: 'Move label line', prompt: 'Where should the label line go?'},
   iconPoint: {label: 'Move icon point', prompt: 'Where should the icon point go?'}
 };
 
-// A released behavior can still have a hook under the same filename. Each of these resets one, so version 5 starts from
-// its own rules rather than from a field or a follow that no longer exists in the file.
-function neutralBehavior(filename) {
-  return {
-    kind: () => kindLabel(filename),
-    title: feature => objectName(feature, filename),
-    sections: () => null,
-    tools: () => [],
-    renderExtras: () => {},
-    controls: () => ({}),
-    usualValues: () => ({}),
-    listsDependOn: [],
-    measures: () => [],
-    vertexTools: () => [],
-    marks: () => [],
-    joinsLines: false,
-    joinedPoints: () => [],
-    isDerived: false,
-    isReshapable: () => true,
-    hasMagnet: (feature, isDrawingOutline) => isDrawingOutline || isArea(feature.geometry),
-    mayContainOthers: true,
-    closesLines: false,
-    isViewOnly: () => false,
-    snappedPoint: () => null,
-    limitedGeometry: geometry => geometry,
-    prepared: feature => feature,
-    problem: () => null,
-    companionEdits: () => [],
-    deletion: () => ({message: '', edits: []}),
-    applyLabel: () => 'Apply',
-    afterApply: () => {},
-    dragTarget: () => null,
-    selectionEntry: entry => entry
-  };
-}
+// A version 5 filename can also exist in a released bundle. The shared defaults replace every released hook, and the
+// surface below adds only what version 5 means; a new shared hook reaches version 5 without being copied here.
+const neutralBehavior = filename => defaultBehavior(filename, null, 5);
 
 export const version5Behaviors = Object.fromEntries(
   version5Files.map(filename => [filename, neutralBehavior(filename)])
 );
 
-// A stored position is shown where it is and moved only when someone moves it. The point is picked on the map; a label
-// line keeps its own points and their order, shifting together to the picked place.
+// A stored position is shown where it is and moved only when someone moves it. A lake POI can place its still unset icon
+// once it has a POI kind; a label line keeps its own points and order, shifting together to the picked place.
 export function storedPositionTools(feature, edit) {
   return Object.entries(storedTools)
-    .filter(([field]) => feature.properties[field] !== undefined)
+    .filter(([field]) =>
+      feature.properties[field] !== undefined ||
+      (field === 'iconPoint' && feature.properties.poiKind !== undefined && feature.properties.iconPoint === undefined)
+    )
     .map(([field, {label, prompt}]) => ({
       label,
       run: async () => {
@@ -96,25 +67,35 @@ const surfaceTitle = ({properties}) => properties.name || `${properties.kind ?? 
 
 const frameSections = feature => {
   const {kind} = feature.properties;
-  if (kind === 'municipality') return [{title: 'Municipality', fields: ['name', 'name:en', 'ISO3166-2', 'population']}];
-  if (kind === 'context') return [{title: 'Neighbour', fields: ['name']}];
-  if (kind === 'sea') return [];
-  return null;
+  if (kind === 'municipality') {
+    return [{title: 'Municipality', fields: ['name', 'name:en', 'ISO3166-2', 'population', 'labelPoint']}];
+  }
+  if (kind === 'context') return [{title: 'Neighbour', fields: ['name', 'labelPoint']}];
+  return [];
 };
+
+const waterSections = [
+  {
+    title: 'Water',
+    fields: [
+      'kind', 'name', 'name:en', 'riverEntityId', 'labelPoint', 'labelLine', 'intermittent', 'tunnel',
+      'visibilityOverride', 'poiKind', 'iconPoint', 'name:sr-Latn', 'addr:housenumber', 'phone', 'website', 'email',
+      'opening_hours', 'wheelchair', 'cuisine', 'wikidata', 'wikipedia', 'level'
+    ]
+  }
+];
 
 const surfaceSections = feature => {
   const {kind} = feature.properties;
-  if (['municipality', 'context', 'sea', 'shade'].includes(kind)) return frameSections(feature);
+  if (['municipality', 'context', 'sea'].includes(kind)) return frameSections(feature);
+  if (kind === 'shade') return [];
   if (kind === 'protected-area') {
     return [{title: 'Protected area', fields: ['osmTag', 'name', 'name:en', 'labelLine']}];
   }
-  return [
-    {
-      title: 'Surface',
-      fields: ['kind', 'name', 'name:en', 'destination', 'labelLine', 'poiKind', 'iconPoint', 'name:sr-Latn',
-        'phone', 'website', 'email', 'opening_hours', 'wheelchair', 'cuisine', 'wikidata', 'wikipedia', 'level']
-    }
-  ];
+  if (['park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground'].includes(kind)) {
+    return null;
+  }
+  return waterSections;
 };
 
 const surfaceBehavior = {
@@ -123,32 +104,32 @@ const surfaceBehavior = {
   title: surfaceTitle,
   sections: surfaceSections,
   tools: storedPositionTools,
-  problem: shadeProblem,
+  controls: edit => ({riverEntityId: value => riverField(value, edit.context)}),
+  problem: surfaceEditProblem,
+  resultProblem: (edits, context) => surfaceResultProblemForEdits(context.session, context, edits),
+  // The file is edited by three layers but drawn whole by the public cartography. Kinds filter only what can be picked.
+  previewEntries: (filename, {session, sources}) =>
+    sources.has(filename) ? session.workingEntries(filename) : null,
+  previewFeatures: surfacePreviewFeatures,
+  storedPositions: storedPositionFeatures,
   selectionEntry: linkedSelection
 };
 
+// The owner chooses the area first; the new shade starts with only its link and is drawn on the map from there.
 function addShadeTool(feature, edit) {
-  if (!feature.properties.greenAreaEntityId && !isArea(feature.geometry)) return [];
   if (!greenAreaKinds.includes(feature.properties.kind)) return [];
+  const properties = shadeSeed({key: edit.key, feature});
+  if (!properties) return [];
   return [
     {
-      label: 'Add shade',
-      run: () => {
-        const shade = shadeForArea({key: edit.key, feature});
-        if (!shade) {
-          edit.showProblem('This area has no room inside it for a shade.');
-          return;
-        }
-        const problem = shadeProblem({key: 'new-shade', feature: shade}, edit.context);
-        if (problem) {
-          edit.showProblem(problem);
-          return;
-        }
-        edit.replaceWith(
-          [{filename: surfaceFile, key: `local:${crypto.randomUUID()}`, after: shade}],
-          `Added a shade for ${surfaceTitle(feature)}`
-        );
-      }
+      label: 'Draw shade',
+      run: () =>
+        edit.context.startNew({
+          label: 'Draw shade',
+          filename: surfaceFile,
+          shape: 'Polygon',
+          properties
+        })
     }
   ];
 }
@@ -163,10 +144,7 @@ export const version5SurfaceBehaviorsByLayer = {
     }
   },
   water: {
-    [surfaceFile]: {
-      ...surfaceBehavior,
-      tools: (feature, edit) => storedPositionTools(feature, edit)
-    }
+    [surfaceFile]: {...surfaceBehavior}
   },
   settlements: {
     [surfaceFile]: {
@@ -182,7 +160,7 @@ export const version5StoredPositions = storedPositionFeatures;
 // The app and the version tests register the same hooks; an earlier bundle must never see them.
 export function registerVersion5Behaviors() {
   registerBehaviors(version5Behaviors, null, 5);
-  registerBehaviors(routeBehaviors, null, 5);
+  registerBehaviors(version5RouteBehaviors, null, 5);
   registerBehaviors(version5SurfaceBehaviors, null, 5);
   for (const [layerId, behaviors] of Object.entries(version5SurfaceBehaviorsByLayer)) {
     registerBehaviors(behaviors, layerId, 5);
