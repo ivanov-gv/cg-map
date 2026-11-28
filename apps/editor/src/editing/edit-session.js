@@ -105,13 +105,23 @@ export class EditSession {
     });
   }
 
-  // Moves one step between two history stacks. Returns the edits it wrote, or null when there is nothing to do.
-  #travelHistory(historyName, {fromStack, toStack, expectedState, stateToWrite}) {
+  // Moves one step between two history stacks. Returns the edits it wrote, or null when there is nothing to do. A
+  // validate hook judges the whole state the step would leave before any of it is written; a problem throws with no
+  // history or feature changed.
+  #travelHistory(historyName, {fromStack, toStack, expectedState, stateToWrite}, validate = null) {
     if (!this.#canTravel(historyName, fromStack, expectedState)) return null;
     const history = this.#historyOf(historyName);
-    const step = history[fromStack].pop();
-    for (const edit of stepEdits(step)) {
-      this.#writeChange(edit.filename ?? historyName, edit.key, edit[stateToWrite]);
+    const step = history[fromStack].at(-1);
+    const edits = stepEdits(step).map(edit => ({
+      filename: edit.filename ?? historyName,
+      key: edit.key,
+      after: edit[stateToWrite]
+    }));
+    const problem = validate?.(edits);
+    if (problem) throw new Error(problem);
+    history[fromStack].pop();
+    for (const edit of edits) {
+      this.#writeChange(edit.filename, edit.key, edit.after);
     }
     history[toStack].push(step);
     for (const name of step.historyNames ?? []) {
@@ -126,14 +136,14 @@ export class EditSession {
     history[toStack].push(step);
   }
 
-  undo(historyName) {
+  undo(historyName, validate = null) {
     const travel = {fromStack: 'undo', toStack: 'redo', expectedState: 'next', stateToWrite: 'previous'};
-    return this.#travelHistory(historyName, travel);
+    return this.#travelHistory(historyName, travel, validate);
   }
 
-  redo(historyName) {
+  redo(historyName, validate = null) {
     const travel = {fromStack: 'redo', toStack: 'undo', expectedState: 'previous', stateToWrite: 'next'};
-    return this.#travelHistory(historyName, travel);
+    return this.#travelHistory(historyName, travel, validate);
   }
 
   canUndo(historyName) {

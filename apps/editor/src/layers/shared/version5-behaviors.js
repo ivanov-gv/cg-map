@@ -47,10 +47,13 @@ export const version5Behaviors = Object.fromEntries(
 // A stored position is shown where it is and moved only when someone moves it. A lake POI can place its still unset icon
 // once it has a POI kind; a label line keeps its own points and order, shifting together to the picked place.
 export function storedPositionTools(feature, edit) {
+  // The inspector passes the typed form, but the toolbar also reads these tools from the open feature. Both paths must
+  // see the same current values, so a field chosen in the form offers its tool at once.
+  const current = edit?.typedFeature?.() ?? feature;
   return Object.entries(storedTools)
     .filter(([field]) =>
-      feature.properties[field] !== undefined ||
-      (field === 'iconPoint' && feature.properties.poiKind !== undefined && feature.properties.iconPoint === undefined)
+      current.properties[field] !== undefined ||
+      (field === 'iconPoint' && current.properties.poiKind !== undefined && current.properties.iconPoint === undefined)
     )
     .map(([field, {label, prompt}]) => ({
       label,
@@ -98,6 +101,12 @@ const surfaceSections = feature => {
   return waterSections;
 };
 
+// The drawing tool takes one ring, but the reviewed shade is a MultiPolygon: its own parts can be drawn or split later.
+function preparedSurface(feature) {
+  if (feature.properties.kind !== 'shade' || feature.geometry?.type !== 'Polygon') return feature;
+  return {...feature, geometry: {type: 'MultiPolygon', coordinates: [feature.geometry.coordinates]}};
+}
+
 const surfaceBehavior = {
   ...neutralBehavior(surfaceFile),
   kind: ({properties}) => `${properties.kind ?? 'surface'}`.replaceAll(/[-_]/g, ' '),
@@ -105,6 +114,7 @@ const surfaceBehavior = {
   sections: surfaceSections,
   tools: storedPositionTools,
   controls: edit => ({riverEntityId: value => riverField(value, edit.context)}),
+  prepared: preparedSurface,
   problem: surfaceEditProblem,
   resultProblem: (edits, context) => surfaceResultProblemForEdits(context.session, context, edits),
   // The file is edited by three layers but drawn whole by the public cartography. Kinds filter only what can be picked.
@@ -123,13 +133,19 @@ function addShadeTool(feature, edit) {
   return [
     {
       label: 'Draw shade',
-      run: () =>
+      run: () => {
+        // Starting another feature closes the inspector, so an unsaved change to the parent must be settled first.
+        if (edit.hasUnappliedEdit()) {
+          edit.showProblem('Apply or Cancel the parent area before drawing its shade.');
+          return;
+        }
         edit.context.startNew({
           label: 'Draw shade',
           filename: surfaceFile,
           shape: 'Polygon',
           properties
-        })
+        });
+      }
     }
   ];
 }

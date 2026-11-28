@@ -45,6 +45,7 @@ import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} 
 import {stopBehaviors} from './layers/stops/layer-stops.js';
 import {waterBehaviors} from './layers/water/layer-water.js';
 import {registerVersion5Behaviors} from './layers/shared/version5-behaviors.js';
+import {surfaceResultProblemForEdits} from './layers/shared/surface-edits.js';
 import {featureCapabilities, layerLockReason, rulesForBundleVersion, validateLayerRules} from './layers/shared/layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
 import {isMagnetOn} from './map-tools/magnet-switch.js';
@@ -256,7 +257,17 @@ const shownFiles = () => {
 
 function withDerivedFacts(entry) {
   const {feature} = entry;
-  return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
+  // Hit tests on public cartography have no guide feature ID. The working key names the entry behind every drawn copy,
+  // including a stored label line, so picking it still opens the object the behavior preview drew.
+  return {
+    ...feature,
+    properties: {
+      ...feature.properties,
+      ...derivedFacts(entry, entriesOf),
+      selectionKey: entry.key,
+      sourceFile: entry.filename
+    }
+  };
 }
 
 // The active layer's files and every changed file use the public cartography with their working features. The others
@@ -589,7 +600,18 @@ function travelHistory(travel, afterTravel = () => {}) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  if (travel() === null) return;
+  // Undo and redo can restore a shared imported step from another layer. The whole resulting surface is checked before
+  // any of its edits is written, so taking a step back can never leave an orphaned shade or a one-sided frame.
+  const validate = edits => {
+    const problem = surfaceResultProblemForEdits(session, behaviorContext(), edits);
+    return problem ? `This step would leave the surface invalid: ${problem}` : null;
+  };
+  try {
+    if (travel(validate) === null) return;
+  } catch (error) {
+    setStatus(error.message, true);
+    return;
+  }
   afterTravel();
   showSessionChange();
 }

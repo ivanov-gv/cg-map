@@ -205,15 +205,25 @@ function renderRoute(container, edit) {
   edit.context.showPath(directionPath(stops, edit.context), edit.feature.properties.colour ?? defaultColour);
 }
 
-// A direction says where it goes; an intercity one has an identity, which a new one gets here.
-function preparedRoute(feature, context) {
+// An intercity direction keeps a producer-readable identity even in a bundle where the headsign is a source fact and
+// must not be derived. Assigning the ID stays independent of filling that text.
+function withDirectionIdentity(feature) {
   const directions = directionsOf(feature).map(direction => {
-    const lastStop = direction.stops.findLast(stop => !isTurnPoint(stop));
-    const headsign = direction.headsign || (lastStop ? stopName(lastStop, context) : '');
     const needsIdentity = feature.properties.network === 'intercity' && !direction.entityId;
-    return {...direction, headsign, ...(needsIdentity ? {entityId: `local:${crypto.randomUUID()}`} : {})};
+    return needsIdentity ? {...direction, entityId: `local:${crypto.randomUUID()}`} : direction;
   });
   return {...feature, properties: {...feature.properties, directions}};
+}
+
+// A direction says where it goes; an intercity one has an identity, which a new one gets here.
+function preparedRoute(feature, context) {
+  const identified = withDirectionIdentity(feature);
+  const directions = directionsOf(identified).map(direction => {
+    const lastStop = direction.stops.findLast(stop => !isTurnPoint(stop));
+    const headsign = direction.headsign || (lastStop ? stopName(lastStop, context) : '');
+    return {...direction, headsign};
+  });
+  return {...identified, properties: {...identified.properties, directions}};
 }
 
 function routeProblem({key, feature}, context) {
@@ -258,7 +268,7 @@ export const version5RouteBehaviors = {
   [routesFile]: {
     ...routeBehaviors[routesFile],
     directionLabel: (direction, index) => direction.headsign || `Direction ${index + 1}`,
-    prepared: feature => feature,
+    prepared: withDirectionIdentity,
     companionEdits: () => [],
     deletion: () => ({message: 'The stops stay.', edits: []})
   }

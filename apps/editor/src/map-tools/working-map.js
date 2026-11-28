@@ -126,16 +126,17 @@ export class WorkingMap {
     return JSON.stringify(files);
   }
 
-  // Updates the data behind layers that are already on the map. Shared sources are filled by the caller's overlay, so
-  // only a file's own preview source and the two built-in sources need new data here. A file whose features depend on the
-  // published layer gets one source per layer, filled from that layer's own derivation.
+  // Updates the data behind layers that are already on the map. A derived file, such as a version 5 surface, keeps one
+  // source per published layer even when the overlay also draws it, so those sources must be refreshed here. An ordinary
+  // shared file is refreshed by the overlay; the other files use their one preview source.
   #updatePreviewData(workingFeaturesByFile, sharedFiles, placeData) {
     if (placeData) this.#map.getSource(placesSource).setData(placeData);
     const labels = workingFeaturesByFile.get(labelsFile);
     if (labels) this.#map.getSource(labelsSource).setData(featureCollection(labels));
     for (const [filename, features] of workingFeaturesByFile) {
-      if (!this.#basemapLayers[filename] || sharedFiles.has(filename)) continue;
+      if (!this.#basemapLayers[filename]) continue;
       if (!this.#previewFeaturesByFile?.has(filename)) {
+        if (sharedFiles.has(filename)) continue;
         this.#map.getSource(previewPrefix + filename).setData(featureCollection(features));
         continue;
       }
@@ -225,18 +226,26 @@ export class WorkingMap {
   #drawInsteadOfBasemap(filename, features, isShared) {
     const layerIds = this.#basemapLayers[filename];
     const publishedLayers = this.#map.getStyle().layers.filter(layer => layerIds.includes(layer.id));
+    if (publishedLayers.length === 0) return;
     const derivation = this.#previewFeaturesByFile?.get(filename) ?? null;
+    // Several published layers can draw one file. They share one preview source; only a per-layer derivation needs its
+    // own. MapLibre refuses a second registration of the same source ID.
+    const fileSourceId = !derivation && !isShared ? previewPrefix + filename : null;
+    if (fileSourceId) {
+      this.#map.addSource(fileSourceId, {type: 'geojson', data: featureCollection(features)});
+      this.#addedSourceIds.push(fileSourceId);
+    }
     for (const published of publishedLayers) {
       const sourceId = derivation
         ? `${previewPrefix}${filename}-${published.id}`
         : isShared
           ? this.#sharedSource
-          : previewPrefix + filename;
+          : fileSourceId;
       const drawnFeatures = derivation ? derivation(published, features) : features;
-      if (sourceId !== this.#sharedSource) {
+      if (derivation) {
         this.#map.addSource(sourceId, {type: 'geojson', data: featureCollection(drawnFeatures)});
         this.#addedSourceIds.push(sourceId);
-        if (derivation) this.#previewSources.set(sourceId, {filename, publishedId: published.id});
+        this.#previewSources.set(sourceId, {filename, publishedId: published.id});
       }
       const [copy] = previewLayers([published], sourceId, !derivation && isShared ? filename : null);
       copy.id = this.#previewIdFor(published.id, filename);

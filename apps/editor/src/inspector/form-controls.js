@@ -8,7 +8,7 @@ import {chooseStreet} from '../layers/addresses/street-dialog.js';
 const roadsFile = 'roads.geojson';
 
 // A read-only field with a button that opens its own control.
-export function chosenField(name, value, buttonLabel, openControl) {
+export function chosenField(name, value, buttonLabel, openControl, clearLabel = null) {
   const wrapper = document.createElement('span');
   wrapper.className = 'chosen-field';
   const input = document.createElement('input');
@@ -24,6 +24,17 @@ export function chosenField(name, value, buttonLabel, openControl) {
       button.focus();
     });
   wrapper.append(input, button);
+  if (clearLabel) {
+    const clear = createElementWithText('button', clearLabel);
+    clear.type = 'button';
+    clear.onclick = () => {
+      if (input.value === '') return;
+      input.value = '';
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      button.focus();
+    };
+    wrapper.append(clear);
+  }
   return wrapper;
 }
 

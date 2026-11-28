@@ -376,7 +376,8 @@ export class InspectorEditing {
     elementById('delete-feature').hidden = isNew || !canDelete;
     const isPhone = this.#context.isPhone();
     elementById('delete-feature').textContent = isPhone ? 'Mark for deletion' : 'Delete';
-    const tools = this.#behavior.tools(feature, this.#editContext());
+    // A tool such as "Move icon point" is offered from what the form says now, not the feature as it was opened.
+    const tools = this.#behavior.tools(this.#currentFeature(), this.#editContext());
     const shownTools = tools.filter(({isDesktopOnly}) => !isDesktopOnly || !isPhone);
     elementById('extra-tools').replaceChildren(
       ...shownTools.map(({label, run}) => {

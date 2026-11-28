@@ -26,12 +26,18 @@ test('a version 5 municipal corner moves both sides of the border in one changes
   expect(sides.map(({reference}) => reference.entityId).sort()).toEqual(['relation/90', 'relation/91']);
   for (const {operation} of sides) expect(operation).toBe('modify');
 
-  // The whole run of the edge, not just the dragged corner, is the same on both sides.
+  // The whole run of the edge, not just the dragged corner, is the same on both sides. A splice can rotate a ring, so
+  // find the corner rather than assuming where the ring starts; the closing point is not another corner to inspect.
   const edgeThroughMovedCorner = after => {
     const ring = after.geometry.coordinates[0].map(stepsOf);
-    const index = ring.findIndex(([east, north]) => east === 2 && north === 0);
-    expect(index).toBeGreaterThan(0);
-    return [ring[index - 1], ring[index], ring[index + 1]];
+    const corners = ring.slice(0, -1);
+    const index = corners.findIndex(([east, north]) => east === 2 && north === 0);
+    expect(index).toBeGreaterThanOrEqual(0);
+    return [
+      corners[(index - 1 + corners.length) % corners.length],
+      corners[index],
+      corners[(index + 1) % corners.length]
+    ];
   };
   const westAfter = sides.find(({reference}) => reference.entityId === 'relation/90').after;
   const eastAfter = sides.find(({reference}) => reference.entityId === 'relation/91').after;
@@ -52,6 +58,8 @@ test('a version 5 municipal corner moves both sides of the border in one changes
             (source.data?.features ?? []).map(feature => ({
               entityId: feature.properties.entityId,
               kind: feature.properties.kind,
+              selectionKey: feature.properties.selectionKey,
+              sourceFile: feature.properties.sourceFile,
               geometry: feature.geometry
             }))
           ])
@@ -60,13 +68,16 @@ test('a version 5 municipal corner moves both sides of the border in one changes
   for (const layerId of ['green', 'water']) {
     await chooseLayer(page, layerId, [0, 0], 18);
     const preview = await surfacePreview();
-    expect(preview.land.map(({kind}) => kind)).toEqual(expect.arrayContaining(['park', 'municipality', 'context']));
-    expect(preview.water.map(({kind}) => kind)).toEqual(expect.arrayContaining(['lake', 'sea']));
+    expect(preview.land.map(({kind}) => kind)).toEqual(expect.arrayContaining(['park', 'context']));
+    expect(preview.water.map(({kind}) => kind)).toEqual(expect.arrayContaining(['municipality', 'lake', 'sea']));
+    expect(preview.rivers.map(({kind}) => kind)).toEqual(expect.arrayContaining(['river']));
     expect(preview['park-names'].map(({kind, geometry}) => [kind, geometry.type])).toEqual([
       ['protected-area', 'LineString']
     ]);
-    const westInPreview = preview.land.find(({entityId}) => entityId === 'relation/90');
+    const westInPreview = preview.water.find(({entityId}) => entityId === 'relation/90');
     expect(westInPreview).toBeDefined();
+    expect(westInPreview.sourceFile).toBe('surface.geojson');
+    expect(typeof westInPreview.selectionKey).toBe('string');
     // MapLibre may wind a GeoJSON ring the other way; the edited vertices, not their order, are what must be drawn.
     const vertices = geometry => geometry.coordinates[0].map(stepsOf).map(point => point.join(',')).sort();
     expect(vertices(westInPreview.geometry)).toEqual(vertices(westAfter.geometry));

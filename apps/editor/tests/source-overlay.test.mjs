@@ -36,6 +36,16 @@ test('a missing hit or an unknown index resolves to nothing', () => {
   assert.deepEqual(sourceEntriesForHits([outOfRangeHit], entries), []);
 });
 
+test('a public cartography hit resolves through its stable working key', () => {
+  const surfaceFile = 'surface.geojson';
+  const entries = [entry('local:shade', stop, surfaceFile)];
+  const hit = {properties: {sourceFile: surfaceFile, selectionKey: 'local:shade'}};
+  assert.deepEqual(sourceEntriesForHits([hit], entries), entries);
+  const fromAnotherFile = {properties: {sourceFile: 'roads.geojson', selectionKey: 'local:shade'}};
+  assert.deepEqual(sourceEntriesForHits([fromAnotherFile], entries), []);
+  assert.deepEqual(sourceEntriesForHits([{properties: {sourceFile: surfaceFile, selectionKey: 'gone'}}], entries), []);
+});
+
 test('hit candidates deduplicate tile and outline hits and preserve working keys after a deletion', () => {
   const entries = [entry('4', stop), entry('local:new', {...stop, id: 'stop:8'})];
   const hit = id => ({id, properties: {sourceFile: 'transport-stops.geojson'}});

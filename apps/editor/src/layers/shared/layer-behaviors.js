@@ -339,6 +339,9 @@ export function newFeatureFields(filename, localId, rules) {
       : {properties: {id: localId, source: rules.localPlaceSource}};
   }
   if (filename === 'settlements.geojson') return {properties: {source: rules.localPlaceSource}};
-  if (filename === 'transport-stops.geojson') return {id: localId, properties: {stopId: localId}};
+  // A version 5 stop carries its own stopId; the feature-level id belongs only to the released model.
+  if (filename === 'transport-stops.geojson') {
+    return rules.bundleVersion >= 5 ? {properties: {stopId: localId}} : {id: localId, properties: {stopId: localId}};
+  }
   return {properties: {}};
 }

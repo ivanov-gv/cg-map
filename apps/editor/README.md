@@ -85,14 +85,17 @@ What the layers do beyond shape and fields:
 - **Parks & green** and **Water** have holes and islands. Waterways show their joins with the same dots and keep them
   when either side moves; moving the coastline moves the sea, the country, its border and the municipalities. Version 5
   reads both from `surface.geojson`. The owner draws a shade for a chosen green area; only the link to that area is
-  stored, never a scaled copy. The whole ring, not just its corners, must stay inside the area including around holes,
-  and shrinking, deleting or retyping the area with its shade still linked is refused. A water area picks its
-  `riverEntityId` from the waterways of the same file; a link to an area or a missing waterway is refused, and the card
-  of a linked lake opens its waterway. Kind and geometry are one decision: a frame kind cannot be invented by retyping.
+  stored, never a scaled copy. The drawn ring is stored as a `MultiPolygon`, and its whole filled area, not just its
+  corners, must stay inside the area including around holes: a shade may not cover a courtyard the hole cuts out.
+  Shrinking, deleting or retyping the area with its shade still linked is refused. Apply or Cancel the parent before
+  drawing its shade, so drawing never discards an open edit. A water area picks its `riverEntityId` from the waterway
+  lines of the same file; a river polygon is not offered, the optional link can be cleared, a link to an area or a
+  missing waterway is refused, and the card of a linked lake opens its waterway. Kind and geometry are one decision: a
+  frame kind cannot be invented by retyping, and fields allowed only for the old kind are rechecked after a retype.
 - **Stored positions:** `labelPoint`, `labelLine` and `iconPoint` are drawn where the source stores them in version 5.
-  Each has its own Move tool; a label line keeps its points and order as it shifts. Coordinates must be WGS84, a lake
-  icon must stay in its lake, and a new lake POI can place its still-unset icon. They are never derived from the outline
-  and are not pickable objects.
+  Each has its own Move tool; a label line keeps its distinct points and order as it shifts. Coordinates must be WGS84,
+  a lake icon must stay in its lake, and a new lake POI can place its still-unset icon as soon as the form says so. They
+  are never derived from the outline and are not pickable objects.
 - **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it. In bundles
   with `slopes.geojson`, a ridge recolours the slopes beside it and its ends slide along the outline of its hill; an end
   cannot be removed, only moved there. Version 4 has no slopes file, so moving a ridge neither recolours anything nor
@@ -104,10 +107,12 @@ What the layers do beyond shape and fields:
   stored municipality polygons, neighbour countries and sea come from `surface.geojson`; one step moves every outline
   holding a changed frame edge, including neighbour, sea and hole boundaries. An edit that would leave a gap or overlap
   is refused, and the whole step is undone from each layer that draws the file.
-- **Stops** go to the side of the road that is clicked and follow the road when moved.
+- **Stops** go to the side of the road that is clicked and follow the road when moved. Version 5 identifies a new stop
+  by its `stopId` alone; the released feature-level `id` is not written or required there.
 - **Routes** are stops in order; the way along the streets is drawn for the editor and not stored. Turn points force it.
-  On a phone they can be read only. Version 5 keeps `transit-routes.json` under the released rules.
-  `transit-network.json` is read as one document and has no edit operations.
+  On a phone they can be read only. Version 5 keeps `transit-routes.json` under the released rules and still gives a new
+  intercity direction its local ID, without deriving a headsign from the last stop. `transit-network.json` is read as
+  one document and has no edit operations.
 - **Railways** are tracks, platforms, halts and stations. The kind says whether a new one is a point, a line or an area;
   tracks and platforms are drawn by the public map style from this file. They are in version 4 bundles.
 
@@ -119,16 +124,18 @@ From the field; choosing one opens its layer, over satellite for a sketch, and A
 `packages/contracts/editor-layers.json`, pinned at 0.3.0 for tests and releases, says what each file allows, including
 `addOnly` provenance fields for bridge and railway outlines. The top-level rules serve bundle versions 1–4; a verified
 version 5 selects `bundleRules["5"]` instead, with its rule format still at 2. The editor checks its per-kind keys
-(`requiredForKinds`, `allowedForKinds`, `requiredWithAny` and `requiredWithAnyForKinds`), exclusive numeric limits and
-`position`/`positions` values, and never applies a released-only field to version 5. A frame kind of `surface.geojson`
-allows its stored geometry and only the properties its `limitedKinds` list. What a layer adds to the rules is its
-behavior in [layer-behaviors.js](src/layers/shared/layer-behaviors.js) and the modules that register one. Nothing is
-recorded until Apply, which validates the resulting file with the same rules as the importer; Delete and an imported
-changeset use the same check. One Apply is one step, which can change several files of the layer and is undone as a
-whole. After Apply the map shows the result at once, Changes counts it, and a toast offers Undo. Importing a reviewed
-changeset is the one exception to "only the active layer", because it names its own files: it is registered in every
-affected layer's history and taken back as one step. Version 5 routes keep the released card and display, but derive
-neither a headsign from a stop name nor the retired `stops.lines` field.
+(`requiredForKinds`, `allowedForKinds`, `requiredWithAny` and `requiredWithAnyForKinds`), exclusive numeric limits,
+distinct `position`/`positions` values, and rechecks kind-scoped fields after a retype. It never applies a released-only
+field to version 5. A frame kind of `surface.geojson` allows its stored geometry and only the properties its
+`limitedKinds` list. What a layer adds to the rules is its behavior in
+[layer-behaviors.js](src/layers/shared/layer-behaviors.js) and the modules that register one. Nothing is recorded until
+Apply, which validates the resulting file with the same rules as the importer; Delete, an imported changeset, Undo and
+Redo use the same check before writing anything. One Apply is one step, which can change several files of the layer and
+is undone as a whole. After Apply the map shows the result at once, Changes counts it, and a toast offers Undo.
+Importing a reviewed changeset is the one exception to "only the active layer", because it names its own files: it is
+registered in every affected layer's history and taken back as one step, so taking it back cannot leave a shade without
+its area. Version 5 routes keep the released card and display, but derive neither a headsign from a stop name nor the
+retired `stops.lines` field.
 
 A property whose rule lists its values is picked from a list, and so is a small range of whole numbers. A free one that
 usually says the same things, such as floors, road numbers or the streets around, offers those with Other…
@@ -175,14 +182,18 @@ narrow screens. Export opens a dialog for the author and reason; import and disc
 Changed files are drawn at once with the published layers found in the running map's own style, from their working
 features: a canyon edge gets all of map-core's wall bands and its rim, a bridge outline gets its deck and edges,
 railways get their tracks and platforms, and protected areas get park names of their own alongside land's. The editor
-copies the style's paint, layout, filters and zoom ranges; it keeps no parallel cartography. When two files share a
-published layer, each gets its own preview and the original is hidden and restored once. For version 5 the complete
-working `surface.geojson` reaches every published surface layer of the running style, with one source per layer: the
-active layer only decides which kinds can be picked. Stored label points and lines are handed to the label layers in
-place of the object's outline, so a moved label is drawn where the source says. Opening another surface layer cannot
-hide an earlier edit. A file the public style does not draw, such as an entrance or a bus stop, keeps its editor
-inspection layer; the Editor itself adds only selection, guides, handles and in-progress overlays. This is not a
-rebuild: below street scale the tiles simplify geometry and drop minor roads, which the editor does not do.
+copies the style's paint, layout, filters and zoom ranges; it keeps no parallel cartography. Several published layers
+that draw one ordinary file share its preview source, and the original is hidden and restored once; only files whose
+features differ by published layer need one source per layer. For version 5 the complete working `surface.geojson`
+reaches every published surface layer of the running style, with one source per layer: the active layer only decides
+which kinds can be picked. Municipalities take the public water fill, water areas likewise, and waterway lines take the
+river layer, so a river polygon never gets a river stroke. Stored label points and lines are handed to the label layers
+in place of the object's outline, so a moved label is drawn where the source says. Every preview feature carries the
+working file and a stable selection key, so a hit on public cartography with guides off opens the same object. Opening
+another surface layer cannot hide an earlier edit, and applying while a surface layer stays active refreshes its preview
+sources. A file the public style does not draw, such as an entrance or a bus stop, keeps its editor inspection layer;
+the Editor itself adds only selection, guides, handles and in-progress overlays. This is not a rebuild: below street
+scale the tiles simplify geometry and drop minor roads, which the editor does not do.
 
 ### Larger datasets
 
@@ -212,8 +223,8 @@ measure a phone, or edits and export at these sizes.
   handed to those layers when they exist. Core publishes no `shades` source layer or settlement-label layer consuming
   `labelPoint`, so the Editor cannot paint those stored facts with the pinned style; it keeps them in the inspector and
   changeset until the core and Web steps land. It does not add its own map-content layers for them.
-- A version 5 `places.geojson` with POIs reaches pinned map-core 0.4.0's retired `properties.id` marker sort. The Editor
-  stops before installing places and reports:
+- Any nonempty version 5 `places.geojson` reaches pinned map-core 0.4.0's retired `properties.id` marker sort, whether a
+  place uses `kind`, `poiKind` or the old `id`. The Editor stops before installing places and reports:
 
   ```text
   Version 5 POIs in places.geojson need map-core support for iconPoint. Pinned map-core 0.4.0 sorts markers by the retired properties.id and throws TypeError: undefined is not iterable; the Editor stops before opening.

@@ -29,12 +29,18 @@ const sourceLayersByFile = {
 // code filters kinds by the active layer. The pinned core has no shades or settlement-label layer; keeping their source
 // layer names in this table lets a core that publishes them draw the stored facts without another editor mapping.
 const surfaceKindsBySourceLayer = {
-  land: [...greenAreaKinds, ...labelFrameKinds],
+  land: [...greenAreaKinds, 'context'],
   protected_areas: ['protected-area'],
   shades: ['shade'],
-  water: [...waterAreaKinds, ...waterLineKinds, 'sea'],
+  // Municipalities are a stored frame polygon, not green land cover: the public water fill draws their outline.
+  water: [...waterAreaKinds, 'municipality', 'sea'],
   surface_labels: labelFrameKinds,
   poi_labels: ['lake']
+};
+// The water fill and the waterways share one archive source layer, so the published layer ID separates the area kinds
+// from the line kinds. A river polygon must never reach the water fill, nor a lake the river stroke.
+const surfaceKindsByPublishedLayer = {
+  rivers: waterLineKinds
 };
 const storedGeometryBySourceLayer = {
   green_area_labels: 'labelLine',
@@ -76,7 +82,7 @@ export function previewLayersFromStyle(layers, bundleVersion) {
 // a moved label point or line is drawn where the source says it is. Every other layer draws the object's own geometry.
 export function surfacePreviewFeatures(publishedLayer, features) {
   const sourceLayer = publishedLayer['source-layer'];
-  const kinds = surfaceKindsBySourceLayer[sourceLayer];
+  const kinds = surfaceKindsByPublishedLayer[publishedLayer.id] ?? surfaceKindsBySourceLayer[sourceLayer];
   const drawn = kinds ? features.filter(({properties}) => kinds.includes(properties.kind)) : features;
   const field = storedGeometryBySourceLayer[sourceLayer];
   if (!field) return drawn;

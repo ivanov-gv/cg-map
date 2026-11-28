@@ -32,6 +32,7 @@ import {
   rulesForBundleVersion,
   validateLayerRules
 } from '../src/layers/shared/layer-rules.js';
+import {surfaceResultProblemForEdits} from '../src/layers/shared/surface-edits.js';
 
 const readContract = name =>
   JSON.parse(fileSystem.readFileSync(new URL(import.meta.resolve(`@ivanov-gv/map-contracts/${name}`))));
@@ -299,14 +300,14 @@ test('a version 5 import judges the whole surface before recording it', async ()
   const shade = {
     type: 'Feature',
     properties: {kind: 'shade', greenAreaEntityId: 'way/50'},
-    geometry: {type: 'Polygon', coordinates: [inner]}
+    geometry: {type: 'MultiPolygon', coordinates: [[inner]]}
   };
   const sources = sourcesWith({'surface.geojson': [park, shade]});
   const session = new EditSession(sources);
   session.recordEdit('surface.geojson', 'local:second', {
     type: 'Feature',
     properties: {kind: 'shade', greenAreaEntityId: 'way/50'},
-    geometry: {type: 'Polygon', coordinates: [inner]}
+    geometry: {type: 'MultiPolygon', coordinates: [[inner]]}
   });
   const changeset = await buildChangeset(session, sources, envelope, version5Rules);
   const target = new EditSession(sources);
@@ -315,6 +316,15 @@ test('a version 5 import judges the whole surface before recording it', async ()
     /surface.geojson: This green area already has a shade/
   );
   assert.deepEqual(target.changedFiles(), [], 'a refused resulting file leaves the session untouched');
+
+  const withoutShade = sourcesWith({'surface.geojson': [park]});
+  const polygonSource = new EditSession(withoutShade);
+  polygonSource.recordEdit('surface.geojson', 'local:shade', {...shade, geometry: {type: 'Polygon', coordinates: [inner]}});
+  const polygonChangeset = await buildChangeset(polygonSource, withoutShade, envelope, version5Rules);
+  await assert.rejects(
+    importChangeset(polygonChangeset, new EditSession(withoutShade), withoutShade, version5Rules, levels),
+    /surface.geojson: A shade needs a MultiPolygon area/
+  );
 });
 
 test('an imported surface step can be taken back from every layer that draws it', async () => {
@@ -342,6 +352,76 @@ test('an imported surface step can be taken back from every layer that draws it'
   assert.ok(desk.redo('green'));
   assert.equal(name(), 'Renamed grove');
   assert.equal(desk.canRedo('settlements'), false);
+});
+
+test('undo and redo judge the whole surface before writing a shared step', () => {
+  const surfaceFile = 'surface.geojson';
+  const park = {
+    type: 'Feature',
+    properties: {kind: 'park', name: 'Grove', entityId: 'way/50'},
+    geometry: {type: 'Polygon', coordinates: [square]}
+  };
+  const shade = {
+    type: 'Feature',
+    properties: {kind: 'shade', greenAreaEntityId: 'way/50'},
+    geometry: {
+      type: 'MultiPolygon',
+      coordinates: [
+        [
+          [
+            [19.2502, 42.4402],
+            [19.2504, 42.4402],
+            [19.2504, 42.4404],
+            [19.2502, 42.4404],
+            [19.2502, 42.4402]
+          ]
+        ]
+      ]
+    }
+  };
+  const sources = sourcesWith({[surfaceFile]: []});
+  const validateOf = session => edits => {
+    const problem = surfaceResultProblemForEdits(session, {entriesOf: name => session.workingEntries(name)}, edits);
+    return problem ? `This step would leave the surface invalid: ${problem}` : null;
+  };
+
+  const undoSession = new EditSession(sources);
+  const validateUndo = validateOf(undoSession);
+  undoSession.recordEdits('water', [{filename: surfaceFile, key: 'local:park', after: park}], [
+    'water',
+    'green',
+    'settlements'
+  ]);
+  undoSession.recordEdits('green', [{filename: surfaceFile, key: 'local:shade', after: shade}]);
+  assert.throws(
+    () => undoSession.undo('water', validateUndo),
+    /would leave the surface invalid: A shade must name a green area/
+  );
+  assert.ok(undoSession.workingFeature(surfaceFile, 'local:park'), 'a refused step wrote nothing');
+  assert.equal(undoSession.canUndo('water'), true, 'a refused step stays in every history');
+
+  undoSession.recordEdits('green', [{filename: surfaceFile, key: 'local:shade', after: null}]);
+  assert.ok(undoSession.undo('water', validateUndo));
+  assert.equal(undoSession.workingFeature(surfaceFile, 'local:park'), null);
+
+  const redoSession = new EditSession(sources);
+  const validateRedo = validateOf(redoSession);
+  redoSession.recordEdits(
+    'water',
+    [
+      {filename: surfaceFile, key: 'local:park', after: park},
+      {filename: surfaceFile, key: 'local:shade', after: shade}
+    ],
+    ['water', 'green', 'settlements']
+  );
+  redoSession.recordEdits('green', [{filename: surfaceFile, key: 'local:park', after: null}]);
+  assert.ok(redoSession.undo('green'));
+  assert.throws(
+    () => redoSession.redo('green', validateRedo),
+    /would leave the surface invalid: A shade must name a green area/
+  );
+  assert.ok(redoSession.workingFeature(surfaceFile, 'local:park'), 'a refused redo wrote nothing');
+  assert.equal(redoSession.canRedo('green'), true);
 });
 
 test('an import is refused whole when the snapshot, fingerprint or rules disagree', async () => {

@@ -102,7 +102,11 @@ function fakeMap(styleLayers = defaultLayers) {
     getStyle: () => ({layers, sources: Object.fromEntries(Object.entries(sources).map(([id, {data}]) => [id, {data}]))}),
     getLayer: id => layers.find(layer => layer.id === id),
     getSource: id => ({setData: data => (sources[id].data = data)}),
-    addSource: (id, specification) => (sources[id] = specification),
+    addSource: (id, specification) => {
+      // MapLibre throws on a second registration of a source ID; the preview must not rely on overwriting one.
+      if (Object.hasOwn(sources, id)) throw new Error(`Source ${id} already exists`);
+      sources[id] = specification;
+    },
     removeSource: id => delete sources[id],
     addLayer: (layer, beforeId) => {
       map.addLayerCalls += 1;
@@ -214,20 +218,25 @@ test('a version 5 surface gets one source per published layer, each drawn from t
     geometry: geometryOf('Polygon')
   };
   const lake = {type: 'Feature', properties: {kind: 'lake', iconPoint: [19.35, 42.45]}, geometry: geometryOf('Polygon')};
+  const river = {type: 'Feature', properties: {kind: 'river', name: 'Creek'}, geometry: geometryOf('LineString')};
   const sea = {type: 'Feature', properties: {kind: 'sea'}, geometry: geometryOf('Polygon')};
-  preview.show(new Map([['surface.geojson', [park, municipality, lake, sea]]]));
+  const features = [park, municipality, lake, river, sea];
+  const shared = new Set(['surface.geojson']);
+  preview.show(new Map([['surface.geojson', features]]), shared);
 
   const drawn = publishedId => map.sources[`edit-preview-surface.geojson-${publishedId}`].data.features;
-  assert.deepEqual(drawn('land'), [park, municipality], 'municipalities are land, not dropped');
-  assert.deepEqual(drawn('meadows'), [park, municipality]);
-  assert.deepEqual(drawn('water'), [lake, sea], 'the sea is water, not land fill');
-  assert.deepEqual(drawn('rivers'), [lake, sea]);
+  assert.deepEqual(drawn('land'), [park], 'the green fill takes land cover, not the frame or water');
+  assert.deepEqual(drawn('meadows'), [park]);
+  assert.deepEqual(drawn('water'), [municipality, lake, sea], 'the public water fill carries the frame outline');
+  assert.deepEqual(drawn('rivers'), [river], 'only waterway lines take the river stroke');
   assert.deepEqual(drawn('protected-areas'), []);
   assert.deepEqual(drawn('park-names'), [{...park, geometry: {type: 'LineString', coordinates: park.properties.labelLine}}]);
   assert.equal(map.sources['edit-preview-surface.geojson'], undefined, 'there is no single filtered copy');
 
-  preview.show(new Map([['surface.geojson', [park, municipality, lake, sea]]]));
-  assert.deepEqual(drawn('land'), [park, municipality], 'a later layer keeps the earlier working file');
+  const renamed = {...park, properties: {...park.properties, name: 'Renamed park'}};
+  preview.show(new Map([['surface.geojson', [renamed, municipality, lake, river, sea]]]), shared);
+  assert.deepEqual(drawn('land'), [renamed], 'the active layer refreshes a derived source after Apply');
+  assert.deepEqual(drawn('water'), [municipality, lake, sea]);
   preview.hide();
   assert.equal(map.sources['edit-preview-surface.geojson-land'], undefined);
 });

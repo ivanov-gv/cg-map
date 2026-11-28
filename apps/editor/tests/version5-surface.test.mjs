@@ -15,6 +15,7 @@ import {
   linkedSelection,
   municipalityCompanions,
   movedStoredValue,
+  frameTopologyProblem,
   shadeProblem,
   shadeSeed,
   storedPositionFeatures,
@@ -52,7 +53,7 @@ const resultOf = (after, entries, key, baseEntries = entries) =>
 const rounded = value =>
   Array.isArray(value[0]) ? value.map(point => point.map(coordinate => Number(coordinate.toFixed(10)))) : value;
 
-function editOf(current, entries = [current]) {
+function editOf(current, entries = [current], {unapplied = false, typedFeature = null} = {}) {
   const properties = [];
   const problems = [];
   let replaced = null;
@@ -60,12 +61,13 @@ function editOf(current, entries = [current]) {
   return {
     key: current.key,
     context: {...contextOf(...entries), startNew: specification => (started = specification)},
-    typedFeature: () => current.feature,
+    typedFeature: () => typedFeature?.() ?? current.feature,
     setProperties: values => properties.push(values),
     showProblem: message => problems.push(message),
     replaceWith: (edits, message) => {
       replaced = {edits, message};
     },
+    hasUnappliedEdit: () => unapplied,
     isOpen: () => true,
     properties,
     problems,
@@ -145,9 +147,8 @@ test('the owner draws a shade; seeding it records only the link', () => {
   assert.equal(shadeSeed(entry('1', {kind: 'sea'}, area.feature.geometry)), null);
 
   const edit = editOf(area);
-  const draw = version5SurfaceBehaviorsByLayer.green[surfaceFile]
-    .tools(area.feature, edit)
-    .find(({label}) => label === 'Draw shade');
+  const behavior = version5SurfaceBehaviorsByLayer.green[surfaceFile];
+  const draw = behavior.tools(area.feature, edit).find(({label}) => label === 'Draw shade');
   assert.ok(draw, 'the green layer offers a shade to draw');
   draw.run();
   assert.deepEqual(edit.started, {
@@ -158,8 +159,19 @@ test('the owner draws a shade; seeding it records only the link', () => {
   });
   assert.equal(edit.replaced, null, 'drawing a shade does not record a derived copy');
 
-  const drawn = feature(seed, {type: 'Polygon', coordinates: [ring(19.0002, 42.0002, 19.0004, 42.0004)]});
+  const dirtyEdit = editOf(area, [area], {unapplied: true});
+  behavior.tools(area.feature, dirtyEdit).find(({label}) => label === 'Draw shade').run();
+  assert.equal(dirtyEdit.started, null, 'an unapplied parent edit is not discarded');
+  assert.deepEqual(dirtyEdit.problems, ['Apply or Cancel the parent area before drawing its shade.']);
+
+  const ringCoordinates = ring(19.0002, 42.0002, 19.0004, 42.0004);
+  const drawn = feature(seed, {type: 'MultiPolygon', coordinates: [[ringCoordinates]]});
   assert.equal(shadeProblem({key: 'local:shade', feature: drawn}, contextOf(area)), null);
+  assert.deepEqual(
+    behavior.prepared(feature(seed, {type: 'Polygon', coordinates: [ringCoordinates]})),
+    drawn,
+    'the drawn ring is stored as the MultiPolygon the contract requires'
+  );
 });
 
 test('a shade must stay inside the whole area, including around holes', () => {
@@ -168,7 +180,7 @@ test('a shade must stay inside the whole area, including around holes', () => {
     coordinates: [ring(0, 0, 1, 1), ring(0.3, 0.3, 0.7, 0.7)]
   });
   const link = {kind: 'shade', greenAreaEntityId: 'way/50'};
-  const inside = feature(link, {type: 'Polygon', coordinates: [ring(0.05, 0.05, 0.2, 0.2)]});
+  const inside = feature(link, {type: 'MultiPolygon', coordinates: [[ring(0.05, 0.05, 0.2, 0.2)]]});
   assert.equal(shadeProblem({key: '1', feature: inside}, contextOf(withHole, entry('1', link, inside.geometry))), null);
 
   const multi = feature(link, {
@@ -177,8 +189,15 @@ test('a shade must stay inside the whole area, including around holes', () => {
   });
   assert.equal(shadeProblem({key: '1', feature: multi}, contextOf(withHole, entry('1', link, multi.geometry))), null);
 
+  // Every corner and edge is outside the hole, but the shade covers the courtyard the hole cuts out.
+  const aroundHole = feature(link, {type: 'MultiPolygon', coordinates: [[ring(0.2, 0.2, 0.8, 0.8)]]});
+  assert.match(
+    shadeProblem({key: '1', feature: aroundHole}, contextOf(withHole, entry('1', link, aroundHole.geometry))),
+    /inside its green area/
+  );
+
   // Every vertex is outside the hole, but the band runs straight across it.
-  const acrossHole = feature(link, {type: 'Polygon', coordinates: [ring(0.2, 0.45, 0.8, 0.55)]});
+  const acrossHole = feature(link, {type: 'MultiPolygon', coordinates: [[ring(0.2, 0.45, 0.8, 0.55)]]});
   assert.match(
     shadeProblem({key: '1', feature: acrossHole}, contextOf(withHole, entry('1', link, acrossHole.geometry))),
     /inside its green area/
@@ -198,8 +217,8 @@ test('a shade must stay inside the whole area, including around holes', () => {
 
 test('Apply, delete and import judge the resulting file, not just the open edit', () => {
   const shade = entry('1', {kind: 'shade', greenAreaEntityId: 'way/50'}, {
-    type: 'Polygon',
-    coordinates: [ring(19.0002, 42.0002, 19.0004, 42.0004)]
+    type: 'MultiPolygon',
+    coordinates: [[ring(19.0002, 42.0002, 19.0004, 42.0004)]]
   });
   const entries = [area, shade];
   assert.equal(resultOf(area.feature, entries, '0'), null);
@@ -212,6 +231,13 @@ test('Apply, delete and import judge the resulting file, not just the open edit'
   assert.match(resultOf(null, entries, '0'), /name a green area/);
   const retyped = feature({...area.feature.properties, kind: 'lake'}, area.feature.geometry);
   assert.match(resultOf(retyped, entries, '0'), /name a green area/);
+
+  const polygonShade = feature(shade.feature.properties, {
+    type: 'Polygon',
+    coordinates: [shade.feature.geometry.coordinates[0][0]]
+  });
+  const withPolygonShade = [area, entry('1', shade.feature.properties, polygonShade.geometry)];
+  assert.match(resultOf(polygonShade, withPolygonShade, '1'), /MultiPolygon area/);
 
   const second = feature(shade.feature.properties, shade.feature.geometry);
   assert.match(resultOf(second, entries, 'local:shade'), /already has a shade/);
@@ -248,6 +274,10 @@ test('the water form picks a waterway and the reference field has a control', ()
     type: 'LineString',
     coordinates: [[19, 42], [19.1, 42.1]]
   });
+  const riverArea = entry('2', {kind: 'river', entityId: 'way/62', name: 'Broad floodway'}, {
+    type: 'Polygon',
+    coordinates: [square]
+  });
   const lake = entry('0', {kind: 'lake'}, {type: 'Polygon', coordinates: [square]});
   const rule = {reference: surfaceFile};
   assert.equal(isFormField(rule, 'riverEntityId', {}), false);
@@ -255,20 +285,29 @@ test('the water form picks a waterway and the reference field has a control', ()
 
   withDocument(body => {
     const behavior = version5SurfaceBehaviorsByLayer.water[surfaceFile];
-    const edit = editOf(lake, [lake, river]);
+    const edit = editOf(lake, [lake, river, riverArea]);
     const control = behavior.controls(edit).riverEntityId('');
     const input = control.children.find(({tagName}) => tagName === 'INPUT');
-    const choose = control.children.find(({tagName}) => tagName === 'BUTTON');
+    const buttons = control.children.filter(({tagName}) => tagName === 'BUTTON');
+    const choose = buttons.find(({textContent}) => textContent === 'Choose');
+    const clear = buttons.find(({textContent}) => textContent === 'Clear');
     assert.equal(input.name, 'riverEntityId');
     assert.equal(input.readOnly, true);
+    assert.ok(clear, 'an optional link can be cleared');
     choose.onclick();
     const dialog = body.children.at(-1);
     assert.equal(dialog.className, 'river-dialog');
+    assert.deepEqual(
+      dialog.children.filter(({tagName}) => tagName === 'BUTTON').map(({textContent}) => textContent),
+      ['Creek', 'Cancel'],
+      'a river polygon is not offered as a waterway'
+    );
     const riverButton = dialog.children.find(({tagName, textContent}) => tagName === 'BUTTON' && textContent === 'Creek');
-    assert.ok(riverButton, 'the picker lists the waterways of the surface file');
     riverButton.onclick();
     assert.equal(input.value, 'way/61');
     assert.equal(dialog.isOpen, false);
+    clear.onclick();
+    assert.equal(input.value, '', 'Clear empties the normal form field');
   });
 });
 
@@ -279,7 +318,16 @@ test('stored positions are checked as WGS84, kept inside lakes and offered when 
   const invalid = {...lake, feature: feature({...lake.feature.properties, iconPoint: [200, 43]}, lake.feature.geometry)};
   assert.match(surfaceEditProblem({key: invalid.key, feature: invalid.feature}, contextOf(invalid)), /WGS84 longitude/);
   const badLine = {...lake, feature: feature({...lake.feature.properties, labelLine: [[19, 42]]}, lake.feature.geometry)};
-  assert.match(surfaceEditProblem({key: badLine.key, feature: badLine.feature}, contextOf(badLine)), /at least two WGS84/);
+  assert.match(surfaceEditProblem({key: badLine.key, feature: badLine.feature}, contextOf(badLine)), /at least two distinct WGS84/);
+
+  const typed = feature({...lake.feature.properties, poiKind: 'cafe'}, lake.feature.geometry);
+  const currentForm = editOf(lake, [lake], {typedFeature: () => typed});
+  assert.ok(
+    version5SurfaceBehaviorsByLayer.green[surfaceFile]
+      .tools(lake.feature, currentForm)
+      .some(({label}) => label === 'Move icon point'),
+    'the toolbar sees a POI kind chosen in the current form'
+  );
 
   const multiLake = entry('0', {kind: 'lake', iconPoint: [19.5, 42.5]}, {
     type: 'MultiPolygon',
@@ -352,6 +400,40 @@ test('every frame outline follows a shared edge, and a one-sided move is refused
   assert.match(resultOf(moved, oneSided, '0', base), /shared frame edge/);
 });
 
+test('a corner with one shared frame edge still takes its neighbour with it', () => {
+  const westRing = [[0, 0], [0, 1], [-1, 1], [-1, 0], [0, 0]];
+  const eastRing = [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]];
+  const west = entry('0', {kind: 'municipality', entityId: 'relation/90'}, {type: 'Polygon', coordinates: [westRing]});
+  const east = entry('1', {kind: 'municipality', entityId: 'relation/91'}, {type: 'Polygon', coordinates: [eastRing]});
+  const movedRing = westRing.map(point => (point[0] === 0 && point[1] === 1 ? [0.3, 1] : point));
+  const moved = feature(west.feature.properties, {type: 'Polygon', coordinates: [movedRing]});
+  const edits = municipalityCompanions({key: west.key, before: west.feature, feature: moved}, contextOf(west, east));
+
+  assert.deepEqual(edits.map(({key}) => key), ['1'], 'the owner of the one shared edge follows');
+  assert.ok(
+    edits[0].after.geometry.coordinates[0].some(([east, north]) => east === 0.3 && north === 1),
+    'the shared corner moves on the neighbour too'
+  );
+  const fitted = [moved, edits[0].after].map((current, index) =>
+    entry(String(index), current.properties, current.geometry)
+  );
+  assert.equal(resultOf(moved, fitted, '0', [west, east]), null);
+  assert.match(resultOf(moved, [moved, east], '0', [west, east]), /shared frame edge/);
+});
+
+test('one frame polygon inside another is refused even without touching edges', () => {
+  const outer = entry('0', {kind: 'context', entityId: 'relation/1'}, {
+    type: 'Polygon',
+    coordinates: [ring(0, 0, 1, 1)]
+  });
+  const inner = entry('1', {kind: 'municipality', entityId: 'relation/2'}, {
+    type: 'Polygon',
+    coordinates: [ring(0.2, 0.2, 0.8, 0.8)]
+  });
+  assert.match(frameTopologyProblem([outer, inner]), /Frame polygons overlap/);
+  assert.equal(frameTopologyProblem([outer]), null);
+});
+
 test('a version 5 surface preview is owned by its behavior and hands the whole file to map-core', () => {
   const behavior = behaviorOf(surfaceFile, 'green', 5);
   const sessions = {workingEntries: () => [area]};
@@ -370,14 +452,15 @@ test('a version 5 surface preview is owned by its behavior and hands the whole f
     type: 'Polygon',
     coordinates: [square]
   });
-  const features = [area, municipality, lake, labelled].map(({feature}) => feature);
-  const land = surfacePreviewFeatures({'source-layer': 'land'}, features);
-  assert.ok(land.some(({properties}) => properties.kind === 'park'));
-  assert.ok(land.some(({properties}) => properties.kind === 'municipality'));
-  assert.equal(land.some(({properties}) => properties.kind === 'lake'), false);
-  const water = surfacePreviewFeatures({'source-layer': 'water'}, features);
-  assert.deepEqual(water, [lake.feature]);
-  const labels = surfacePreviewFeatures({'source-layer': 'surface_labels'}, features);
+  const river = entry('4', {kind: 'river'}, {type: 'LineString', coordinates: [[19, 42], [19.1, 42.1]]});
+  const features = [area, municipality, lake, labelled, river].map(({feature}) => feature);
+  const land = surfacePreviewFeatures({id: 'land', 'source-layer': 'land'}, features);
+  assert.deepEqual(land.map(({properties}) => properties.kind), ['park', 'park'], 'land takes green cover only');
+  const water = surfacePreviewFeatures({id: 'water', 'source-layer': 'water'}, features);
+  assert.deepEqual(water.map(({properties}) => properties.kind), ['municipality', 'lake']);
+  const rivers = surfacePreviewFeatures({id: 'rivers', 'source-layer': 'water'}, features);
+  assert.deepEqual(rivers, [river.feature], 'the published river layer takes waterway lines, not water areas');
+  const labels = surfacePreviewFeatures({id: 'surface_labels', 'source-layer': 'surface_labels'}, features);
   assert.deepEqual(labels.map(({geometry}) => geometry.coordinates), [municipality.feature.properties.labelPoint]);
   const icons = surfacePreviewFeatures({'source-layer': 'poi_labels'}, features);
   assert.deepEqual(icons.map(({geometry}) => geometry.coordinates), [lake.feature.properties.iconPoint]);
@@ -424,17 +507,34 @@ test('version 5 routes keep the released display but derive neither headsign nor
   assert.equal(route.directionLabel(featureWithStops.properties.directions[0], 0, stopContext), 'To Middle');
   assert.equal(version5Route.directionLabel(featureWithStops.properties.directions[0], 0, stopContext), 'Direction 1');
   assert.deepEqual(version5Route.prepared(featureWithStops, stopContext), featureWithStops);
+
+  const intercity = feature({number: '6', network: 'intercity', directions: [{headsign: '', stops: ['1', '2']}]}, null);
+  const prepared = version5Route.prepared(intercity);
+  assert.equal(prepared.properties.directions[0].headsign, '', 'a source headsign is not derived from a stop name');
+  assert.match(prepared.properties.directions[0].entityId, /^local:/, 'a new direction still gets producer identity');
   assert.deepEqual(version5Route.companionEdits({key: '0', feature: featureWithStops}, stopContext), []);
 });
 
 test('a version 5 POI stops the Editor before map-core can sort by the retired id', () => {
+  // A version 5 standalone POI carries `kind`, not the retired `id` or a `poiKind` on another object.
+  const cafes = [
+    feature({kind: 'cafe', name: 'First cafe'}, {type: 'Point', coordinates: [19, 42]}),
+    feature({kind: 'cafe', name: 'Second cafe'}, {type: 'Point', coordinates: [19.001, 42.001]})
+  ];
   const sources = new Map([
     [surfaceFile, {collection: {features: []}}],
-    ['places.geojson', {collection: {features: [feature({poiKind: 'cafe', name: 'Stand'}, {type: 'Point', coordinates: [19, 42]})]}}]
+    ['places.geojson', {collection: {features: cafes}}]
   ]);
   const expected = 'Version 5 POIs in places.geojson need map-core support for iconPoint. Pinned map-core 0.4.0 sorts markers by the retired properties.id and throws TypeError: undefined is not iterable; the Editor stops before opening.';
   assert.equal(version5PoiProblem(sources, 5), expected);
   assert.equal(version5PoiProblem(sources, 3), null);
-  const released = new Map([['places.geojson', {collection: {features: [feature({id: 'node/1'}, {type: 'Point', coordinates: [19, 42]})]}}]]);
-  assert.equal(version5PoiProblem(released, 5), null);
+  const withPoiKind = feature({poiKind: 'cafe', iconPoint: [19, 42]}, {type: 'Point', coordinates: [19, 42]});
+  assert.equal(
+    version5PoiProblem(new Map([['places.geojson', {collection: {features: [withPoiKind]}}]]), 5),
+    expected
+  );
+  assert.equal(version5PoiProblem(new Map([['places.geojson', {collection: {features: []}}]]), 5), null);
+  const oldId = new Map([['places.geojson', {collection: {features: [feature({id: 'node/1'}, {type: 'Point', coordinates: [19, 42]})]}}]]);
+  assert.equal(version5PoiProblem(oldId, 5), expected, 'the guard does not depend on which v5 fields a place uses');
+  assert.equal(version5PoiProblem(oldId, 3), null, 'the guard belongs only to version 5');
 });

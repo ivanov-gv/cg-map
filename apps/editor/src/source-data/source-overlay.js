@@ -39,13 +39,22 @@ export function overlayCollection(entries, stateOf = () => 'editable', factsOf =
 export function sourceEntriesForHits(hits, entries) {
   const indices = new Set();
   const placeIndices = new Map();
-  entries.forEach(({filename, feature}, index) => {
+  const previewIndices = new Map();
+  entries.forEach(({filename, feature, key}, index) => {
     if (filename === placesFile) placeIndices.set(feature.properties.id, index);
+    // The public cartography preview carries its working key, so a hit on it resolves to the same entry a guide would.
+    previewIndices.set(`${filename}:${key}`, index);
   });
   for (const hit of hits) {
     if (hit?.source === 'places' && hit.properties.activeIds) {
       const visibleIndices = JSON.parse(hit.properties.activeIds).map(id => placeIndices.get(id));
       for (const index of visibleIndices.filter(index => index !== undefined)) indices.add(index);
+      continue;
+    }
+    const selectionKey = hit?.properties?.selectionKey;
+    if (selectionKey !== undefined) {
+      const index = previewIndices.get(`${hit.properties.sourceFile}:${selectionKey}`);
+      if (index !== undefined) indices.add(index);
       continue;
     }
     const entry = Number.isInteger(hit?.id) ? entries[hit.id] : null;

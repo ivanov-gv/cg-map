@@ -82,8 +82,12 @@ function positionProblem(name, value) {
 }
 
 function positionsProblem(name, value) {
-  const isLine = Array.isArray(value) && value.length >= 2 && value.every(isValidCoordinate);
-  return isLine ? null : `${name} must be at least two WGS84 positions`;
+  const isLine =
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    value.every(isValidCoordinate) &&
+    new Set(value.map(String)).size === value.length;
+  return isLine ? null : `${name} must be at least two distinct WGS84 positions`;
 }
 
 const isCoordinatePair = isValidCoordinate;
@@ -149,9 +153,11 @@ export function propertyProblem(properties, propertyRules, levels, previousPrope
       if (scoped || general) return `${name} is required with ${scoped ?? general}`;
       continue;
     }
-    // A level stands as it was only while the category it depends on does too.
+    // A level stands as it was only while its category does. A kind-only value must also be judged again after a
+    // retype: keeping a value unchanged does not keep it allowed for the new kind.
     const isCategoryChange = propertyRule.isLevel && !isSameJSON(properties.category, previousProperties.category);
-    if (isSameJSON(value, previousProperties[name]) && !isCategoryChange) continue;
+    const isKindChange = Boolean(propertyRule.allowedForKinds) && !isSameJSON(properties.kind, previousProperties.kind);
+    if (isSameJSON(value, previousProperties[name]) && !isCategoryChange && !isKindChange) continue;
     if (value === null && propertyRule.allowsNull) continue;
     if (propertyRule.allowedForKinds && !propertyRule.allowedForKinds.includes(kind)) {
       return `${name} is not allowed for ${kind}`;
@@ -235,17 +241,21 @@ function addedPlaceProblem({properties}, localId, localPlaceSource) {
   return properties.source === localPlaceSource ? null : `a new place must have source "${localPlaceSource}"`;
 }
 
-function addedStopProblem(after, localId) {
+function addedStopProblem(after, localId, bundleVersion) {
+  if (bundleVersion >= 5) {
+    return after.properties.stopId === localId ? null : 'a new stop must use its local ID as its stop ID';
+  }
   const isOwnIdentity = after.id === localId && after.properties.stopId === localId;
   return isOwnIdentity ? null : 'a new stop must use its local ID as its stop ID';
 }
 
 // A new feature claims nothing beyond what the rules list, so it can never pass for an imported upstream fact.
-function addedFeatureProblem({filename, reference, before, after}, rule, localPlaceSource) {
+function addedFeatureProblem({filename, reference, before, after}, rule, localPlaceSource, bundleVersion) {
   const {localId} = reference;
   if (typeof localId !== 'string' || !localId.startsWith('local:')) return 'a new feature needs a local ID';
   if (before !== null) return 'a new feature has no before state';
-  const allowedFields = filename === stopsFile ? [...newFeatureFields, 'id'] : newFeatureFields;
+  const allowedFields =
+    filename === stopsFile && !(bundleVersion >= 5) ? [...newFeatureFields, 'id'] : newFeatureFields;
   const unlistedField = Object.keys(after).find(name => !allowedFields.includes(name));
   if (unlistedField) return `a new feature must not claim a feature ${unlistedField}`;
   const isPlace = filename === placesFile;
@@ -258,7 +268,7 @@ function addedFeatureProblem({filename, reference, before, after}, rule, localPl
   if (missing) return `a new feature needs ${missing[0]}`;
   if (Object.hasOwn(rule.limitedKinds ?? {}, after.properties.kind)) return `${after.properties.kind} cannot be added`;
   if (isPlace) return addedPlaceProblem(after, localId, localPlaceSource);
-  return filename === stopsFile ? addedStopProblem(after, localId) : null;
+  return filename === stopsFile ? addedStopProblem(after, localId, bundleVersion) : null;
 }
 
 // Returns why one changeset operation is not allowed by the rules of its file, or null.
@@ -273,7 +283,7 @@ export function operationProblem(operation, rules, levels) {
   if (after?.type !== 'Feature' || !after.properties) return 'invalid feature';
   const identityProblem =
     operationKind === 'add'
-      ? addedFeatureProblem(operation, rule, rules.localPlaceSource)
+      ? addedFeatureProblem(operation, rule, rules.localPlaceSource, rules.bundleVersion)
       : lockedFieldProblem(before, after, rule, rules.bundleVersion);
   return identityProblem ?? featureProblem(after, rule, levels, before, rules.bundleVersion);
 }

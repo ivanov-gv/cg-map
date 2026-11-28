@@ -6,6 +6,7 @@ import {
   pointTouchesSegment,
   segmentsIntersect
 } from '../../geometry/geometry-validation.js';
+import {interiorPoint} from '../../geometry/interior-point.js';
 import {changedStretch, followingEdits} from '../../geometry/shared-shapes.js';
 
 export const greenAreaKinds = [
@@ -36,39 +37,25 @@ const keysOf = geometry => new Set(segmentsOf(ringsOf(geometry)).map(segmentKey)
 const linkedEntry = (entries, entityId) =>
   entityId === undefined ? undefined : entries.find(entry => entryId(entry) === entityId);
 
-// One moved vertex can be on several shared frame edges. Keeping its own anchored stretch for each changed run lets
-// every neighbour of that step follow, rather than merging distant changes into one stretch no outline runs along.
-function changedRuns(before, after) {
+// A corner can sit on a shared edge on one side and an exterior edge on the other. Matching each changed edge on its
+// own finds the owner of that edge; matching one long run of corners can miss the neighbour entirely. When a vertex was
+// added or removed there is no edge-by-edge pairing, so the stretch between the points that stayed is used instead.
+function changedEdges(before, after) {
   if (before.length !== after.length) {
     const stretch = changedStretch(before, after);
     return stretch ? [stretch] : [];
   }
-  const changed = before
-    .map((point, index) => (isSamePoint(point, after[index]) ? null : index))
-    .filter(index => index !== null);
-  if (changed.length === 0) return [];
-  const runs = [];
-  let first = changed[0];
-  let last = first;
-  for (const index of changed.slice(1)) {
-    if (index !== last + 1) {
-      runs.push([first, last]);
-      first = index;
-    }
-    last = index;
-  }
-  runs.push([first, last]);
-  return runs.map(([start, end]) => {
-    const from = Math.max(0, start - 1);
-    const to = Math.min(before.length, end + 2);
-    return {before: before.slice(from, to), after: after.slice(from, to)};
+  return before.slice(1).flatMap((_, index) => {
+    const beforeEdge = [before[index], before[index + 1]];
+    const afterEdge = [after[index], after[index + 1]];
+    return isSamePoint(beforeEdge, afterEdge) ? [] : [{before: beforeEdge, after: afterEdge}];
   });
 }
 
 function changedStretches(before, after) {
   const previous = ringsOf(before);
   const following = ringsOf(after);
-  return previous.flatMap((ring, index) => changedRuns(ring, following[index] ?? ring));
+  return previous.flatMap((ring, index) => changedEdges(ring, following[index] ?? ring));
 }
 
 function edgesByKey(entries) {
@@ -136,9 +123,25 @@ function edgeStaysInside(start, end, polygons) {
   });
 }
 
+const isInsideFilled = (point, polygons) => polygons.some(rings => pointInsidePolygon(point, rings));
+
+// Corners and edges alone do not see a shade drawn around a courtyard. Look inside the filled parts on both sides: a
+// point of the parent hole inside the shade, or a point of the shade inside the hole, is a piece of the wrong surface.
+function shadeCoversHole(shadePolygons, areaPolygons) {
+  const holes = areaPolygons.flatMap(rings => rings.slice(1));
+  const holeFilled =
+    holes.some(hole => [interiorPoint([hole]), ...hole].some(point => isInsideFilled(point, shadePolygons)));
+  return (
+    holeFilled ||
+    shadePolygons.some(rings => holes.some(hole => pointInsidePolygon(interiorPoint(rings), [hole])))
+  );
+}
+
 function shadeStaysInside(feature, area) {
   const areaPolygons = polygonsOf(area.feature.geometry);
-  return polygonsOf(feature.geometry).every(rings =>
+  const shadePolygons = polygonsOf(feature.geometry);
+  if (shadePolygons.length === 0 || shadeCoversHole(shadePolygons, areaPolygons)) return false;
+  return shadePolygons.every(rings =>
     rings.every(
       ring =>
         ring.every(point => pointInArea(point, areaPolygons)) &&
@@ -151,7 +154,7 @@ function shadeStaysInside(feature, area) {
 // the resulting file, so a moved or retyped area is judged with its shade still in place.
 export function shadeProblem({key, feature}, context) {
   if (feature.properties.kind !== 'shade') return null;
-  if (!isAreaShape(feature.geometry)) return 'A shade needs an area.';
+  if (feature.geometry?.type !== 'MultiPolygon') return 'A shade needs a MultiPolygon area.';
   const entries = context.entriesOf(surfaceFile);
   const {greenAreaEntityId} = feature.properties;
   const area = linkedEntry(entries, greenAreaEntityId);
@@ -209,8 +212,9 @@ function positionProblems(feature) {
     const value = feature.properties[field];
     if (value === undefined) continue;
     if (field === 'labelLine') {
-      if (!Array.isArray(value) || value.length < 2 || !value.every(isValidCoordinate)) {
-        return 'labelLine needs at least two WGS84 positions.';
+      const distinct = Array.isArray(value) && new Set(value.map(String)).size === value.length;
+      if (!Array.isArray(value) || value.length < 2 || !value.every(isValidCoordinate) || !distinct) {
+        return 'labelLine needs at least two distinct WGS84 positions.';
       }
     } else if (!isValidCoordinate(value)) {
       return `${field} must be a WGS84 longitude and latitude.`;
@@ -286,10 +290,32 @@ function hasPartialSharedEdge(entries) {
   return false;
 }
 
+const isStrictlyInside = (point, rings) =>
+  pointInsidePolygon(point, rings) && !rings.some(ring => boundaryPoint(point, ring));
+
+// Edge contacts cannot see a polygon moved wholly inside another one. Their filled areas must stay apart too.
+function hasNestedFrame(entries) {
+  const polygons = entries
+    .filter(({feature}) => isFrameKind(feature.properties.kind))
+    .flatMap(entry => polygonsOf(entry.feature.geometry).map(rings => ({key: entry.key, rings})));
+  return polygons.some((first, index) =>
+    polygons.slice(index + 1).some(second => {
+      if (first.key === second.key) return false;
+      const firstPoints = [interiorPoint(first.rings), ...first.rings.flat()];
+      const secondPoints = [interiorPoint(second.rings), ...second.rings.flat()];
+      return (
+        firstPoints.some(point => isStrictlyInside(point, second.rings)) ||
+        secondPoints.some(point => isStrictlyInside(point, first.rings))
+      );
+    })
+  );
+}
+
 // The whole frame must come out of an edit without gaps, overlaps or one-sided moves.
 export function frameTopologyProblem(entries, baseEntries = entries) {
   if (hasBrokenBaseEdge(entries, baseEntries)) return 'A shared frame edge was moved on only one side.';
-  return hasPartialSharedEdge(entries) ? 'Frame polygons overlap along part of an edge.' : null;
+  if (hasPartialSharedEdge(entries)) return 'Frame polygons overlap along part of an edge.';
+  return hasNestedFrame(entries) ? 'Frame polygons overlap.' : null;
 }
 
 // Checks every feature of the resulting file, including links and uniqueness that one open edit cannot see alone.

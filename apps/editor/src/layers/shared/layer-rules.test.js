@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {pinnedContractsRoot} from '../../../tests/pinned-contracts.mjs';
+import {newFeatureFields} from './layer-behaviors.js';
 import {featureCapabilities, operationProblem, propertyProblem, rulesForBundleVersion} from './layer-rules.js';
 
 const contracts = JSON.parse(readFileSync(path.join(pinnedContractsRoot, 'editor-layers.json'), 'utf8'));
@@ -50,9 +51,60 @@ test('a stored point and a stored line are judged by their own WGS84 type', () =
     assert.match(propertyProblem(withKind({labelPoint: bad}), properties, levels), /WGS84 longitude and latitude/);
   }
   assert.equal(propertyProblem(withKind({labelLine: [[19.2, 42.4], [19.3, 42.5]]}), properties, levels), null);
-  for (const bad of [[], [[19.2]], [19.2, 42.4], [[200, 42.4], [19.3, 42.5]]]) {
-    assert.match(propertyProblem(withKind({labelLine: bad}), properties, levels), /at least two WGS84 positions/);
+  for (const bad of [
+    [],
+    [[19.2]],
+    [19.2, 42.4],
+    [[200, 42.4], [19.3, 42.5]],
+    [[19.2, 42.4], [19.2, 42.4]]
+  ]) {
+    assert.match(propertyProblem(withKind({labelLine: bad}), properties, levels), /at least two distinct WGS84 positions/);
   }
+});
+
+test('a retyped surface kind rechecks facts that only the old kind allowed', () => {
+  const rules = rulesForBundleVersion(contracts, 5);
+  const before = surfaceFeature({
+    kind: 'lake',
+    name: 'Mill pond',
+    poiKind: 'cafe',
+    iconPoint: [19.0005, 42.0005]
+  });
+  const after = surfaceFeature({
+    kind: 'pond',
+    name: 'Mill pond',
+    poiKind: 'cafe',
+    iconPoint: [19.0005, 42.0005]
+  });
+  const operation = {filename: 'surface.geojson', operation: 'modify', reference: {key: '0'}, before, after};
+  assert.match(operationProblem(operation, rules, levels), /poiKind is not allowed for pond/);
+
+  const withoutLakeFacts = surfaceFeature({kind: 'pond', name: 'Mill pond'});
+  assert.equal(operationProblem({...operation, after: withoutLakeFacts}, rules, levels), null);
+});
+
+test('a version 5 stop carries stopId without the retired feature id', () => {
+  const localId = 'local:123e4567-e89b-42d3-a456-426614174000';
+  const version5 = rulesForBundleVersion(contracts, 5);
+  assert.deepEqual(newFeatureFields('transport-stops.geojson', localId, version5), {properties: {stopId: localId}});
+  const after = {
+    type: 'Feature',
+    properties: {name: 'New stop', stopId: localId},
+    geometry: {type: 'Point', coordinates: [19.25, 42.44]}
+  };
+  assert.equal(
+    operationProblem(
+      {filename: 'transport-stops.geojson', operation: 'add', reference: {localId}, before: null, after},
+      version5,
+      levels
+    ),
+    null
+  );
+  const released = rulesForBundleVersion(contracts, 3);
+  assert.deepEqual(newFeatureFields('transport-stops.geojson', localId, released), {
+    id: localId,
+    properties: {stopId: localId}
+  });
 });
 
 test('a limit names the actual maximum it refuses, as the importer does', () => {

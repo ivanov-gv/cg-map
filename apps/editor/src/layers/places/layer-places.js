@@ -8,17 +8,14 @@ import {byFrequency} from '../../inspector/usual-values.js';
 const buildingsFile = 'buildings.geojson';
 const placesFile = 'places.geojson';
 
-// Pinned map-core 0.4.0 sorts place markers by the retired `properties.id`. Version 5 stores POIs as `poiKind` and
-// `iconPoint` on other objects, so passing one to map-core throws `TypeError: undefined is not iterable` at startup.
-// There is no editor-side workaround: the Editor stops before installPlaces and says why, until map-core reads the
-// version 5 fields itself.
+// Pinned map-core 0.4.0 sorts place markers by the retired `properties.id`. A version 5 place has no such copy: a
+// standalone POI uses `kind`, and one on another object uses `poiKind` and `iconPoint`. Passing any of them to map-core
+// throws `TypeError: undefined is not iterable` at startup. There is no editor-side workaround: the Editor stops before
+// installPlaces and says why, until map-core reads the version 5 fields itself.
 export function version5PoiProblem(sources, bundleVersion) {
   if (bundleVersion < 5 || !sources.has(placesFile)) return null;
   const places = sources.get(placesFile).collection.features;
-  const hasPoi = places.some(
-    ({properties}) => properties.poiKind !== undefined || properties.iconPoint !== undefined
-  );
-  if (!hasPoi) return null;
+  if (places.length === 0) return null;
   return `Version 5 POIs in ${placesFile} need map-core support for iconPoint. Pinned map-core 0.4.0 sorts markers by the retired properties.id and throws TypeError: undefined is not iterable; the Editor stops before opening.`;
 }
 

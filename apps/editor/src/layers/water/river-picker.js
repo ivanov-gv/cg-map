@@ -10,7 +10,10 @@ const riverIdOf = ({key, feature}) => feature.properties.entityId ?? key;
 
 // A small native dialog with one button per waterway. Nothing is stored until a button is chosen.
 export function chooseRiver(entries, currentId, onChosen) {
-  const rivers = entries.filter(entry => waterLineKinds.includes(entry.feature.properties.kind));
+  const rivers = entries.filter(
+    entry =>
+      waterLineKinds.includes(entry.feature.properties.kind) && entry.feature.geometry?.type === 'LineString'
+  );
   const dialog = document.createElement('dialog');
   dialog.className = 'river-dialog';
   dialog.append(createElementWithText('h2', 'Choose a waterway'));
@@ -34,7 +37,11 @@ export function chooseRiver(entries, currentId, onChosen) {
 
 // The form keeps a normal readonly field, so Apply reads the picked identity like any other property.
 export function riverField(value, context) {
-  return chosenField('riverEntityId', value, 'Choose', (_current, onChosen) =>
-    chooseRiver(context.entriesOf(surfaceFile), value, onChosen)
+  return chosenField(
+    'riverEntityId',
+    value,
+    'Choose',
+    (_current, onChosen) => chooseRiver(context.entriesOf(surfaceFile), value, onChosen),
+    'Clear'
   );
 }
