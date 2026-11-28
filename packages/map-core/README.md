@@ -14,9 +14,9 @@ service worker, editor modes or writes. See [architecture](../../docs/system-arc
 [UI 3.Core](https://github.com/ivanov-gv/cg-map/wiki/UI---3.Core) and the Penpot card "7 · Map primitives (Core)".
 [src/basemap-palette.js](src/basemap-palette.js) holds one colour token per primitive part.
 [src/drawing-order.js](src/drawing-order.js) lists the drawing groups bottom to top; every basemap layer records its
-group in `metadata`, and a unit test fails when a layer is out of order. The final order is `land` → `shaded-slopes` →
-`sunlit-slopes` → `canyon-walls` → `canyon-rims` → `water` → `buildings` → `meadows` → `contour-lines` → `railways` →
-`streets` → `trails` → `main-routes` → `stairways` → `bridges` → `bridge-streets` → `bridge-trails` →
+group in `metadata`, and a unit test fails when a layer is out of order. The final order is `land` → `shades` →
+`shaded-slopes` → `sunlit-slopes` → `canyon-walls` → `canyon-rims` → `water` → `buildings` → `meadows` → `contour-lines`
+→ `railways` → `streets` → `trails` → `main-routes` → `stairways` → `bridges` → `bridge-streets` → `bridge-trails` →
 `bridge-main-routes` → `bridge-stairways` → `labels` → `points-of-interest`. Ground roads stay above railways and below
 decks; roads on bridges stay above decks. Applications install points of interest after the style; both apps place them
 below street labels today.
@@ -43,18 +43,50 @@ installs the badge on demand. Railways sit above land use but below ground roads
 road crossing a track covers it. The tile layer carries no `bridge` or `layer` field, so the style has no `-on-bridge`
 railway copy and no way to raise a track above a deck. Station names remain in the labels group above roads.
 
-Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
-and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
-it, since the style has no sprite.
+The `water` fill paints every polygon in the `water` tile layer with the open-water tone, including the stored sea
+polygon with `kind: sea` from the version-5 surface data. Its filter is already kind-agnostic, so publishing the sea
+needs no style change; coastline lines stay separate and get no river stroke.
 
-Contour lines are one faint type every 20 m. Their heights are labels along each line, kept un-flipped: the relief
-contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along
-each line; the wiki's single column down a hill's sunlit slope is not reproduced.
+Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m"
+taken from the summit's own stored `ele` rounded to whole metres, and park names along the `green_area_labels` lines. A
+summit without `ele` shows its name alone: the terrain model's `demElevation` is never substituted
+([ADR 0049](../../docs/decisions/0049-data-stored-as-shown.md)). The `shades` layer paints stored shade polygons from
+the `shades` tile layer (`kind: shade`) with the shaded tone, over green areas and below roads. The `slopes` and
+`ridges` layers stay while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged
+until data switches. `createMap` adds the summit triangle when the style first asks for it, since the style has no
+sprite.
 
-Walking paths are drawn by what they are to a walker: park routes (main paths with `inGreenArea`) as a cream path over a
-casing, trails and city footpaths as quiet round dots, stairways with a step pattern. Meadows fill only land areas with
-the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an application that
-hit-tests walking paths by layer id adds them when it upgrades.
+Contour lines stay one faint type every 20 m in data's `contours` tile layer. map-core reads no stored `index` flag:
+that flag belongs to data's tile build, where it decides which lines survive low zoom. Their heights are labels along
+each line, kept un-flipped: the relief contract runs every contour with higher ground on its left, so the digits face
+uphill. MapLibre spaces the labels along each line; the wiki's single column down a hill's sunlit slope is not
+reproduced.
+
+Settlement names stay with the applications: Web draws its city names today. map-core has no settlement label layer;
+drawing them there is Feature #534, outside this task.
+
+Walking paths are drawn by what they are to a walker: stored `pathClass: park` as a cream path over a casing,
+`pathClass: trail` and `pathClass: city` as quiet round dots, and stairways with a step pattern. The stored classes also
+apply to tracks. Today's tiles store `main` instead of `park`/`city`, so a main path still uses `inGreenArea` to pick
+its pattern, and a path with no class still uses the trail pattern; those are the only legacy fallbacks. Meadows fill
+only land areas with the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an
+application that hit-tests walking paths by layer id adds them when it upgrades.
+
+POI symbols always follow the feature's own `kind`, with the kind-to-category table in
+[src/place-category.js](src/place-category.js). A stored `category` is ignored even for `fuel`, `hotel` and `yes`, the
+three kinds that occur in two categories today (owner decision on #517, 2026-11-28); the five POIs with conflicting
+values therefore change icon. Marker identity, co-location groups, tap hits and `activeIds` use `entityId`; apps/web and
+apps/core-demo still pin data 0.1.0, whose places have no `entityId`, so a POI without one uses its legacy `id`.
+apps/editor pins 0.2.0, which already publishes `entityId`.
+
+A POI's zoom-band level comes from `placeVisibilityLevel(feature, config)`: its own `visibilityOverride`, then a stored
+`visibilityLevel` (today's released places), then the policy's exact `kinds` rule, then the `categories` default for the
+kind resolved by `placeCategory`, then the fallback. `parseVisibilityConfig(rawConfig, policy)` accepts the data-owned
+policy table: a supplied policy's `fallbackLevel` replaces the contract's `legacyFallbackLevel`, while a caller without
+a policy keeps the legacy fallback. The policy's fallback and its `kinds` and `categories` rules must all name supported
+levels other than the individually reviewed level 1, and its two tables are copied at parse time so later caller
+mutation cannot bypass that validation. An invalid POI level fails with the POI's `entityId ?? id`, and
+`normalizePlaces` calls this same function so the Editor's single-POI preview cannot disagree with the directory.
 
 ## Lifecycle
 
