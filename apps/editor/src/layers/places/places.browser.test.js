@@ -102,7 +102,10 @@ test('a place keeps its details and hours through the changeset', async ({page})
 // Bug: a drawn place needs every required field, remembers the building it is put on, and keeps a local identity when it
 // has no source ID yet.
 test('a new place needs its fields, gets hours, and belongs to the building it is moved onto', async ({page}) => {
+  await tapAt(page, [-2.5, 2.5]);
+  await expect(page.locator('.inspector')).toBeVisible();
   await startDrawing(page, 'Add place');
+  await expect(page.locator('.inspector')).toBeHidden();
   await tapAt(page, [0, 2]);
   await expect(page.locator('#inspector-extras')).toContainText('Stands on its own');
   await page.locator('[name="name"]').fill('New bakery');
