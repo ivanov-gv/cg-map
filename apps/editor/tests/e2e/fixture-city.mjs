@@ -342,7 +342,9 @@ function version5Features() {
       ...released['buildings.geojson'],
       feature('node/10', {kind: 'entrance', entrance: 'main', buildingEntityId: 'way/1'}, point(-2, 1))
     ],
-    'places.geojson': [],
+    'places.geojson': [
+      feature('node/20', {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe'}, point(-1, 1))
+    ],
     'settlements.geojson': [
       feature('node/80', {kind: 'settlement', name: 'Town', place: 'town', source: 'OpenStreetMap'}, point(-3, 8)),
       feature(

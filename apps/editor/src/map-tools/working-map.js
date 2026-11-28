@@ -1,4 +1,4 @@
-import {buildPlaceMarkers, markerKeys, normalizePlaces, placeBands, placeCategory, placeLayers} from '@ivanov-gv/map-core';
+import {buildPlaceMarkers, markerKeys, normalizePlaces, placeBands, placeLayers} from '@ivanov-gv/map-core';
 import {basemapLayersFromStyle} from './basemap-layers.js';
 
 // Draws changed files, and the files of the active layer, with the public cartography from their working features. It is
@@ -30,18 +30,6 @@ export function previewLayers(publishedLayers, sourceName, sharedFilename = null
   });
 }
 
-// Per-kind defaults come from the policy table; only an explicit override is stored on a v5 POI.
-export function effectivePlaceVisibilityLevel(properties, placePolicy) {
-  if (properties.visibilityOverride !== undefined) return properties.visibilityOverride;
-  if (!placePolicy || properties.kind === undefined) return undefined;
-  const fromKind = placePolicy.kinds?.[properties.kind];
-  if (fromKind !== undefined) return fromKind;
-  const category = placeCategory(properties);
-  const fromCategory = placePolicy.categories?.[category];
-  if (fromCategory !== undefined) return fromCategory;
-  return placePolicy.fallbackLevel;
-}
-
 function placeIdentity(feature) {
   const identity =
     feature.properties.entityId ?? feature.properties.id ?? feature.properties.selectionKey ?? feature.id;
@@ -50,31 +38,20 @@ function placeIdentity(feature) {
   return undefined;
 }
 
-function withEffectiveVisibility(features, visibilityConfig, placePolicy) {
+// Map-core resolves visibility from overrides, stored levels and the policy; the editor only adds identity for
+// features that carry it outside properties, such as local working features keyed by selectionKey.
+function withPlaceIdentity(features) {
   return features.map(feature => {
     const identity = placeIdentity(feature);
-    const level =
-      feature.properties.visibilityLevel !== undefined
-        ? feature.properties.visibilityLevel
-        : effectivePlaceVisibilityLevel(feature.properties, placePolicy);
-    const hasLevel = level !== undefined && visibilityConfig.thresholds.has(level);
-    const needsLevel = hasLevel && feature.properties.visibilityLevel === undefined;
-    const needsIdentity = identity !== undefined && feature.properties.entityId === undefined && feature.properties.id === undefined;
-    if (!needsLevel && !needsIdentity) return feature;
-    return {
-      ...feature,
-      properties: {
-        ...feature.properties,
-        ...(needsIdentity ? {entityId: identity} : {}),
-        ...(needsLevel ? {visibilityLevel: level} : {})
-      }
-    };
+    const needsIdentity =
+      identity !== undefined && feature.properties.entityId === undefined && feature.properties.id === undefined;
+    return needsIdentity ? {...feature, properties: {...feature.properties, entityId: identity}} : feature;
   });
 }
 
 // The markers the public map would draw for these places. Throws on a place it could not publish, as the public app does.
-function placeMarkers(features, visibilityConfig, placePolicy) {
-  const directory = normalizePlaces(withEffectiveVisibility(features, visibilityConfig, placePolicy), visibilityConfig);
+function placeMarkers(features, visibilityConfig) {
+  const directory = normalizePlaces(withPlaceIdentity(features), visibilityConfig);
   return featureCollection(buildPlaceMarkers(directory, markerKeys(directory)));
 }
 
@@ -82,7 +59,6 @@ export class WorkingMap {
   #map;
   #basemapLayers;
   #visibilityConfig;
-  #placePolicy;
   #publishedPlaces;
   #sharedSource;
   #previewFeaturesByFile;
@@ -103,7 +79,6 @@ export class WorkingMap {
     map,
     basemapLayers = basemapLayersFromStyle(map.getStyle().layers),
     visibilityConfig,
-    placePolicy = null,
     publishedPlaces,
     sharedSource = null,
     previewFeaturesByFile = null
@@ -111,7 +86,6 @@ export class WorkingMap {
     this.#map = map;
     this.#basemapLayers = basemapLayers;
     this.#visibilityConfig = visibilityConfig;
-    this.#placePolicy = placePolicy;
     this.#publishedPlaces = publishedPlaces;
     this.#sharedSource = sharedSource;
     this.#previewFeaturesByFile = previewFeaturesByFile;
@@ -133,7 +107,7 @@ export class WorkingMap {
     let publishedPlaceData;
     try {
       placeData = workingFeaturesByFile.has(placesFile)
-        ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig, this.#placePolicy)
+        ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig)
         : null;
       publishedPlaceData = placeData ? this.#publishedData(placesSource) : null;
     } catch (error) {
@@ -230,7 +204,7 @@ export class WorkingMap {
   // A move or addition can create a shared marker with a level combination absent from the release. Install its bands
   // in the public drawing order, and remove only these extra layers when restoring the published map.
   #installWorkingPlaceBands(features) {
-    const directory = normalizePlaces(withEffectiveVisibility(features, this.#visibilityConfig, this.#placePolicy), this.#visibilityConfig);
+    const directory = normalizePlaces(withPlaceIdentity(features), this.#visibilityConfig);
     const {names, icons} = placeLayers(placeBands(directory, this.#visibilityConfig), this.#visibilityConfig);
     let nextLayerId = 'road-labels';
     for (const layer of [...names, ...icons].reverse()) {
@@ -249,7 +223,7 @@ export class WorkingMap {
 
   // Labels are loaded from a URL, which the style still holds. Places are built in the browser, so build them again.
   #publishedData(sourceId) {
-    if (sourceId === placesSource) return placeMarkers(this.#publishedPlaces, this.#visibilityConfig, this.#placePolicy);
+    if (sourceId === placesSource) return placeMarkers(this.#publishedPlaces, this.#visibilityConfig);
     return this.#map.getStyle().sources[sourceId].data;
   }
 

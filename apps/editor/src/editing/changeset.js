@@ -2,6 +2,7 @@ import {layerIdsForFile} from '../layers/shared/editor-layers.js';
 import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from '../shared/hashing.js';
 import {operationProblem} from '../layers/shared/layer-rules.js';
+import {version5PlaceLinkProblem} from '../layers/places/layer-places.js';
 import {surfaceResultProblemForEdits} from '../layers/shared/surface-edits.js';
 
 const latestVersion = 2;
@@ -116,13 +117,36 @@ export async function importChangeset(changeset, session, sources, rules, levels
     requireImportable(!problem, problem);
   }
   const edits = operations.map(({filename, after}, index) => ({filename, key: keys[index], after}));
-  const surfaceProblem = surfaceResultProblemForEdits(
-    session,
-    {entriesOf: filename => session.workingEntries(filename)},
-    edits
-  );
-  requireImportable(!surfaceProblem, `surface.geojson: ${surfaceProblem}`);
   const bundleVersion = rules.bundleVersion ?? 3;
+  const placesFile = 'places.geojson';
+  const proposedEntries = (filename, overlays) => {
+    if (!sources.has(filename)) return [];
+    const entries = session.workingEntries(filename).map(entry => ({...entry}));
+    const byKey = new Map(entries.map(entry => [entry.key, entry]));
+    for (const edit of overlays ?? []) {
+      if (edit.filename !== filename) continue;
+      if (edit.after === null) {
+        byKey.delete(edit.key);
+        continue;
+      }
+      byKey.set(edit.key, {key: edit.key, feature: edit.after});
+    }
+    return [...byKey.values()];
+  };
+  const entriesOf = filename => proposedEntries(filename, edits);
+  const proposedContext = {
+    entriesOf,
+    findEntity: (filename, entityId) =>
+      entriesOf(filename).find(({key, feature}) => key === entityId || feature.properties.entityId === entityId)
+  };
+  const surfaceProblem = surfaceResultProblemForEdits(session, proposedContext, edits);
+  requireImportable(!surfaceProblem, `surface.geojson: ${surfaceProblem}`);
+  if (bundleVersion >= 5 && sources.has(placesFile)) {
+    for (const {key, feature} of proposedEntries(placesFile, edits)) {
+      const problem = version5PlaceLinkProblem(feature, proposedContext);
+      requireImportable(!problem, `places.geojson: ${key}: ${problem}`);
+    }
+  }
   const filenames = [...sources.keys()];
   const layerIds = [
     ...new Set(operations.flatMap(({filename}) => layerIdsForFile(filename, bundleVersion, filenames)))

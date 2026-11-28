@@ -218,19 +218,14 @@ measure a phone, or edits and export at these sizes.
 - Changed files are not a rebuild: see above. The importer says when tiles need one.
 - A version 4 bundle has no slopes file. Moving a ridge changes the ridge alone; recolouring the derived slopes is not
   possible there, and adding or deleting a ridge stays a later step.
-- Version 5 is read from the pending contract, not yet emitted by data. The pinned map-core 0.4.0 has no version 5
+- Version 5 is read from the pending contract, not yet emitted by data. The pinned map-core 0.7.0 has no version 5
   tiles: the whole surface is previewed through the released land, water and label layers, and stored label geometry is
   handed to those layers when they exist. Core publishes no `shades` source layer or settlement-label layer consuming
   `labelPoint`, so the Editor cannot paint those stored facts with the pinned style; it keeps them in the inspector and
   changeset until the core and Web steps land. It does not add its own map-content layers for them.
-- Any nonempty version 5 `places.geojson` reaches pinned map-core 0.4.0's retired `properties.id` marker sort, whether a
-  place uses `kind`, `poiKind` or the old `id`. The Editor stops before installing places and reports:
-
-  ```text
-  Version 5 POIs in places.geojson need map-core support for iconPoint. Pinned map-core 0.4.0 sorts markers by the retired properties.id and throws TypeError: undefined is not iterable; the Editor stops before opening.
-  ```
-
-  There is no editor-side workaround; the fixture bundle leaves that file empty.
+- Version 5 POIs in `places.geojson` are editable: stand-alone POIs, `buildingEntityId` links to buildings, and
+  `addr:streetEntityId` links to street objects. `visibilityOverride` is available on any v5 POI to add, change or
+  clear; level 1 is allowed only as an override. The preview uses map-core's place visibility rule with the data policy.
 
 - Version 5 has no live slope preview from ridges. Shades replace ridges and slopes in the model; the shared-derivation
   step of #490 is not part of this reader. `transit-network.json` is read-only, and transit rules wait on #527.

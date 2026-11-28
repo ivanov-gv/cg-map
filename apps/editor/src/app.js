@@ -59,7 +59,7 @@ import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHi
 import {showLevelPicker} from './layers/roads/level-picker.js';
 import {hideToast, showToast} from './map-tools/toast.js';
 import {previewLayersFromStyle} from './map-tools/basemap-layers.js';
-import {effectivePlaceVisibilityLevel, WorkingMap} from './map-tools/working-map.js';
+import {WorkingMap} from './map-tools/working-map.js';
 import {
   hideInspector,
   inspectorHasFocus,
@@ -1066,24 +1066,19 @@ async function createEditorMap(mapMetadata) {
 }
 
 function installMapLayers(visibilityConfig, placePolicy) {
-  const placeVisibility = parseVisibilityConfig(visibilityConfig);
+  const policy = bundleVersion >= 5 ? placePolicy : undefined;
+  const placeVisibility = parseVisibilityConfig(visibilityConfig, policy);
   const publishedPlaces = sources.get('places.geojson').collection.features;
-  const displayPlaces = publishedPlaces.map(feature => {
-    if (feature.properties.visibilityLevel !== undefined) return feature;
-    const level = effectivePlaceVisibilityLevel(feature.properties, placePolicy);
-    return level === undefined ? feature : {...feature, properties: {...feature.properties, visibilityLevel: level}};
-  });
   const previewFeaturesByFile = new Map();
   for (const filename of sources.keys()) {
     const behavior = behaviorOf(filename, null, bundleVersion);
     if (behavior.previewFeatures) previewFeaturesByFile.set(filename, behavior.previewFeatures);
   }
-  installPlaces(map, displayPlaces, placeVisibility);
+  installPlaces(map, publishedPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
     basemapLayers: previewLayersFromStyle(map.getStyle().layers, bundleVersion),
     visibilityConfig: placeVisibility,
-    placePolicy,
     publishedPlaces,
     sharedSource: 'editor-source',
     previewFeaturesByFile
