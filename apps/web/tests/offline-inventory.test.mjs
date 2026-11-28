@@ -12,7 +12,7 @@ test('offline shell includes every built runtime module and excludes the worker'
   buildFixture(fixture);
   const manifest = readFixtureManifest(fixture);
   assertShellIncludesModules(findRuntimeModules(fixture.source), manifest.shell);
-  assert.ok(manifest.shell.includes('feature/nested.js'));
+  assert.ok(manifest.shell.includes('shared/feature/nested.js'));
   assert.ok(!manifest.shell.includes('sw.js'));
 });
 
@@ -32,7 +32,7 @@ test('shell discovery excludes host config, generated output, downloads, and tes
     'data/manifest.json',
     'data/stale.pmtiles.partial',
     'data/range-payload.bin',
-    'feature/nested.test.js',
+    'shared/feature/nested.test.js',
     'test-support/helper.js'
   ])
     assert.ok(!discovered.includes(excluded), `${excluded} must stay outside the shell`);
@@ -42,7 +42,7 @@ test('shell discovery excludes host config, generated output, downloads, and tes
   for (const included of [
     'index.html',
     'app.js',
-    'feature/nested.js',
+    'shared/feature/nested.js',
     'style.css',
     'vendor/maplibre-gl.js',
     'map-core/index.js',

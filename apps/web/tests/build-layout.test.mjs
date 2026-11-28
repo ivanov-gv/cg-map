@@ -10,12 +10,12 @@ test('build keeps nested source paths, local imports and asset strings, and excl
   const result = runFixtureTool(fixture, 'build.mjs');
   assert.equal(result.status, 0, `${result.stdout ?? ''}${result.stderr ?? ''}`);
 
-  const nestedModule = path.join(fixture.output, 'feature/nested.js');
+  const nestedModule = path.join(fixture.output, 'shared/feature/nested.js');
   assert.ok(fs.existsSync(nestedModule), 'nested runtime module must keep its source path');
   assert.equal(
     fs.readFileSync(nestedModule, 'utf8'),
     [
-      "import '../map-core/index.js';",
+      "import '../../map-core/index.js';",
       "import {localHelper} from './map-core/helper.js';",
       'export const featureValue = 1;',
       "export const localIconPath = './map-core/icon.svg';",
@@ -27,12 +27,12 @@ test('build keeps nested source paths, local imports and asset strings, and excl
   assert.equal(builtNested.featureValue, 1);
   assert.equal(builtNested.localIconPath, './map-core/icon.svg');
   assert.equal(builtNested.localHelper, 'feature-local');
-  assert.ok(fs.existsSync(path.join(fixture.output, 'feature/map-core/icon.svg')));
+  assert.ok(fs.existsSync(path.join(fixture.output, 'shared/feature/map-core/icon.svg')));
   assert.equal(
     fs.readFileSync(path.join(fixture.output, 'app.js'), 'utf8'),
-    "import {featureValue} from './feature/nested.js';\nexport {featureValue};\n"
+    "import {featureValue} from './shared/feature/nested.js';\nexport {featureValue};\n"
   );
-  assert.ok(!fs.existsSync(path.join(fixture.output, 'feature/nested.test.js')));
-  assert.ok(!fs.existsSync(path.join(fixture.output, 'feature/nested.browser.test.js')));
+  assert.ok(!fs.existsSync(path.join(fixture.output, 'shared/feature/nested.test.js')));
+  assert.ok(!fs.existsSync(path.join(fixture.output, 'shared/feature/nested.browser.test.js')));
   assert.ok(!fs.existsSync(path.join(fixture.output, 'test-support')));
 });

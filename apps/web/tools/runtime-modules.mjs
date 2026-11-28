@@ -211,7 +211,6 @@ function assertReviewedImport(sourceDirectory, moduleName, filePath, dependency)
 
 function allowedFoldersFor(moduleName) {
   const folder = topLevelFolder(moduleName);
-  if (folder === '') return null;
   return folderDependencyRules.get(folder) ?? new Set(['shared', folder]);
 }
 
@@ -223,7 +222,6 @@ function assertFolderBoundary(sourceDirectory, moduleName, filePath, dependency)
     isRuntimeDependency(sourceDirectory, filePath, dependency),
     `${moduleName}: forbidden dependency ${dependency}. Only relative runtime modules inside src and the published @ivanov-gv/map-core entry are allowed.`
   );
-  if (allowedFolders === null) return;
   const dependencyModule = dependencyPath(sourceDirectory, filePath, dependency);
   const dependencyFolder = topLevelFolder(dependencyModule);
   assert.ok(

@@ -22,7 +22,7 @@ export function createFixtureProject(testContext) {
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const app = path.join(root, 'apps/web');
   const source = path.join(app, 'src');
-  fs.mkdirSync(path.join(source, 'feature/map-core'), {recursive: true});
+  fs.mkdirSync(path.join(source, 'shared/feature/map-core'), {recursive: true});
   fs.mkdirSync(path.join(source, 'test-support'), {recursive: true});
   fs.cpSync(pinnedCoreRoot, path.join(root, 'packages/map-core'), {recursive: true});
   fs.mkdirSync(path.join(app, 'tools'), {recursive: true});
@@ -37,7 +37,7 @@ export function createFixtureProject(testContext) {
   // Contracts are installed at the repository root, while core and data are installed beside this app.
   if (!fs.existsSync(path.join(root, 'node_modules')))
     fs.symlinkSync(path.join(appRoot, '../../node_modules'), path.join(root, 'node_modules'), 'dir');
-  fs.writeFileSync(path.join(source, 'app.js'), "import {featureValue} from './feature/nested.js';\nexport {featureValue};\n");
+  fs.writeFileSync(path.join(source, 'app.js'), "import {featureValue} from './shared/feature/nested.js';\nexport {featureValue};\n");
   fs.writeFileSync(path.join(source, 'sw.js'), "self.addEventListener('install', () => {});\n");
   for (const moduleName of mainRuntimeModules) {
     if (moduleName === 'app.js') continue;
@@ -46,7 +46,7 @@ export function createFixtureProject(testContext) {
     fs.writeFileSync(destination, 'export {};\n');
   }
   fs.writeFileSync(
-    path.join(source, 'feature/nested.js'),
+    path.join(source, 'shared/feature/nested.js'),
     [
       "import '@ivanov-gv/map-core';",
       "import {localHelper} from './map-core/helper.js';",
@@ -56,10 +56,10 @@ export function createFixtureProject(testContext) {
       ''
     ].join('\n')
   );
-  fs.writeFileSync(path.join(source, 'feature/map-core/helper.js'), "export const localHelper = 'feature-local';\n");
-  fs.writeFileSync(path.join(source, 'feature/map-core/icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n');
-  fs.writeFileSync(path.join(source, 'feature/nested.test.js'), "import '../../../../editor/src/core.js';\n");
-  fs.writeFileSync(path.join(source, 'feature/nested.browser.test.js'), "import '../../../../editor/src/core.js';\n");
+  fs.writeFileSync(path.join(source, 'shared/feature/map-core/helper.js'), "export const localHelper = 'feature-local';\n");
+  fs.writeFileSync(path.join(source, 'shared/feature/map-core/icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n');
+  fs.writeFileSync(path.join(source, 'shared/feature/nested.test.js'), "import '../../../../../editor/src/core.js';\n");
+  fs.writeFileSync(path.join(source, 'shared/feature/nested.browser.test.js'), "import '../../../../../editor/src/core.js';\n");
   fs.writeFileSync(path.join(source, 'test-support/helper.js'), 'export const helper = true;\n');
   const environment = {...process.env, MAP_DATA_ROOT: pinnedDataRoot, MAP_CONTRACTS_ROOT: pinnedContractsRoot};
   // A fixture build chooses its own core and is never a release unless a caller says so.

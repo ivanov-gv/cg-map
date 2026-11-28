@@ -65,7 +65,7 @@ test('web boundaries keep zero-import modules free of new local imports', testCo
 
 test('web boundaries reject a forbidden dependency in a new runtime module', testContext => {
   const fixture = createFixtureProject(testContext);
-  const newModule = path.join(fixture.source, 'feature/nested.js');
+  const newModule = path.join(fixture.source, 'shared/feature/nested.js');
   fs.writeFileSync(
     newModule,
     "import {bad} from '../../../../editor/src/layers/shared/editor-layers.js';\nexport const nestedValue = bad;\n"
@@ -83,9 +83,20 @@ test('web boundaries reject imports outside allowed feature folders', testContex
   assert.throws(() => assertRuntimeBoundaries(fixture.source), /Feature folders may import only their allowed folders/);
 });
 
+test('web boundaries enforce the root folder rule for app.js and sw.js', testContext => {
+  const fixture = createFixtureProject(testContext);
+  fs.mkdirSync(path.join(fixture.source, 'editor'), {recursive: true});
+  fs.writeFileSync(path.join(fixture.source, 'editor/added.js'), 'export const added = true;\n');
+  fs.writeFileSync(
+    path.join(fixture.source, 'app.js'),
+    "import {added} from './editor/added.js';\nexport {added};\n"
+  );
+  assert.throws(() => assertRuntimeBoundaries(fixture.source), /Feature folders may import only their allowed folders/);
+});
+
 test('web boundaries reject dynamic imports and MapLibre gesture handlers', testContext => {
   const fixture = createFixtureProject(testContext);
-  const newModule = path.join(fixture.source, 'feature/nested.js');
+  const newModule = path.join(fixture.source, 'shared/feature/nested.js');
   const allowedSource = fs.readFileSync(newModule, 'utf8');
   fs.writeFileSync(newModule, `${allowedSource}\nexport const later = () => import('./other.js');\n`);
   assert.throws(() => assertRuntimeBoundaries(fixture.source), /dynamic imports/);
@@ -96,7 +107,7 @@ test('web boundaries reject dynamic imports and MapLibre gesture handlers', test
 
 test('web boundaries reject a runtime import of a test support file', testContext => {
   const fixture = createFixtureProject(testContext);
-  const newModule = path.join(fixture.source, 'feature/nested.js');
+  const newModule = path.join(fixture.source, 'shared/feature/nested.js');
   fs.writeFileSync(newModule, "import {helper} from '../test-support/helper.js';\nexport const nestedValue = helper;\n");
   assert.throws(() => assertRuntimeBoundaries(fixture.source), /forbidden dependency/);
 });
