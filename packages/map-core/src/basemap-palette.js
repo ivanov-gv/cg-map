@@ -18,6 +18,8 @@ export const basemapColors = {
   summitHalo: '#f6f3ea',
   parkName: '#4e7a3e',
   parkNameHalo: '#e8f0dc',
+  settlementLabel: '#3c5945',
+  settlementLabelHalo: '#fafaf0',
   water: '#aad3df',
   canyonWallAtWater: '#a69880',
   canyonWallAtRim: '#e2dbcb',

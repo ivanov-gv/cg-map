@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {featureFilter} from '@maplibre/maplibre-gl-style-spec';
+import {createExpression, featureFilter} from '@maplibre/maplibre-gl-style-spec';
 import {mapStyle, basemapColors, drawingGroups, drawingGroupKey, roadLayerIds} from './index.js';
 
 const walkingLayerIds = ['paths', 'footways', 'park-routes', 'cycleways', 'steps'];
@@ -12,8 +12,38 @@ function walkingLayersFor(properties) {
   return filters.filter(({filter}) => filter.filter({zoom: 16}, feature)).map(({id}) => id);
 }
 
+function evaluateExpression(expression, properties, zoom = 16) {
+  const compiled = createExpression(expression);
+  assert.equal(compiled.result, 'success', JSON.stringify(compiled.value?.errors ?? []));
+  return compiled.value.evaluate({zoom}, {properties});
+}
+
+// Version 5 stores the walker's class on each path; no green-area test decides the pattern.
+test('a stored pathClass selects one walking pattern', () => {
+  const cases = [
+    [{kind: 'footway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'cycleway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'footway', pathClass: 'city'}, 'footways'],
+    [{kind: 'path', pathClass: 'city'}, 'footways'],
+    [{kind: 'footway', pathClass: 'trail'}, 'paths'],
+    [{kind: 'track', pathClass: 'trail'}, 'paths'],
+    [{kind: 'cycleway', pathClass: 'city'}, 'cycleways'],
+    [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
+    [{kind: 'steps', pathClass: 'trail'}, 'steps']
+  ];
+  for (const [properties, expectedLayer] of cases) {
+    assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
+  }
+  assert.deepEqual(
+    walkingLayersFor({kind: 'pedestrian', pathClass: 'city'}),
+    [],
+    'a pedestrian street stays a street'
+  );
+});
+
 // Every walking way gets exactly one walking pattern: two would draw dots over steps or over a park route.
-test('each walking path class lands in exactly one walking layer', () => {
+// Today's tiles carry `main` plus `inGreenArea`, or no class at all; those values keep their existing look.
+test("today's walking path properties keep their existing pattern", () => {
   const cases = [
     [{kind: 'footway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'cycleway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
@@ -30,7 +60,6 @@ test('each walking path class lands in exactly one walking layer', () => {
   for (const [properties, expectedLayer] of cases) {
     assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
   }
-  assert.deepEqual(walkingLayersFor({kind: 'pedestrian', pathClass: 'trail'}), [], 'a pedestrian street stays a street');
 });
 
 for (const prefix of ['/', '/cg-map/']) {
@@ -103,6 +132,72 @@ test('coastline lines are not styled as waterways', () => {
     ['==', ['geometry-type'], 'LineString'],
     ['!=', ['get', 'kind'], 'coastline']
   ]);
+});
+
+test('contour index comes from elevation, not a stored index flag', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const ordinary = style.layers.find(layer => layer.id === 'relief-contour-lines');
+  const index = style.layers.find(layer => layer.id === 'index-contour-lines');
+  assert.ok(ordinary, 'relief-contour-lines is missing');
+  assert.ok(index, 'index-contour-lines is missing');
+  for (const layer of [ordinary, index]) {
+    assert.equal(layer.source, 'basemap');
+    assert.equal(layer['source-layer'], 'relief');
+    assert.equal(layer.metadata[drawingGroupKey], 'contour-lines');
+  }
+  const ordinaryMatches = featureFilter(ordinary.filter).filter;
+  const indexMatches = featureFilter(index.filter).filter;
+  const contourLine = elevation => ({type: 2, properties: {elevation}});
+  for (const [elevation, isIndex] of [[0, true], [100, true], [200, true], [99, false], [120, false]]) {
+    assert.equal(indexMatches({zoom: 16}, contourLine(elevation)), isIndex, `${elevation} m index`);
+    assert.equal(ordinaryMatches({zoom: 16}, contourLine(elevation)), !isIndex, `${elevation} m ordinary`);
+  }
+  assert.equal(indexMatches({zoom: 16}, {type: 1, properties: {elevation: 200}}), false, 'summits are not contours');
+  assert.ok(index.paint['line-width'] > ordinary.paint['line-width'], 'an index line must be bold');
+  assert.ok(!JSON.stringify(index.filter).includes('"index"'), 'the stored index flag is gone');
+});
+
+test('settlement label size comes from place and population', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const labels = style.layers.find(layer => layer.id === 'settlement-labels');
+  assert.ok(labels, 'settlement-labels is missing');
+  assert.equal(labels['source-layer'], 'settlements');
+  assert.equal(labels.metadata[drawingGroupKey], 'labels');
+  assert.equal(labels.maxzoom, 13);
+  assert.equal(labels.paint['text-color'], basemapColors.settlementLabel);
+  const sizeOf = properties => evaluateExpression(labels.layout['text-size'], properties);
+  const cases = [
+    [{place: 'city'}, 13],
+    [{place: 'town'}, 11],
+    [{place: 'village'}, 9],
+    [{place: 'hamlet'}, 8],
+    [{place: 'hamlet', population: 250}, 9],
+    [{place: 'town', population: '12000'}, 13],
+    [{place: 'village', population: 3000}, 11]
+  ];
+  for (const [properties, expectedSize] of cases) {
+    assert.equal(sizeOf(properties), expectedSize, JSON.stringify(properties));
+  }
+});
+
+test("today's contour and settlement tiles keep their existing look", () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const contour = style.layers.find(layer => layer.id === 'contour-lines');
+  assert.equal(contour['source-layer'], 'contours');
+  assert.equal(contour.filter, undefined);
+  assert.deepEqual(contour.paint, {
+    'line-color': basemapColors.contour,
+    'line-opacity': 0.28,
+    'line-width': 0.7
+  });
+  for (const id of ['relief-contour-lines', 'index-contour-lines', 'relief-contour-labels'])
+    assert.equal(style.layers.find(layer => layer.id === id)['source-layer'], 'relief');
+  const settlement = style.layers.find(layer => layer.id === 'settlement-labels');
+  const matches = featureFilter(settlement.filter).filter;
+  const today = {type: 1, properties: {name: 'Podgorica', rank: 'capital'}};
+  const version5 = {type: 1, properties: {name: 'Podgorica', place: 'city', population: 150799}};
+  assert.equal(matches({zoom: 8}, today), false, 'a rank-only settlement gets no new label');
+  assert.equal(matches({zoom: 8}, version5), true);
 });
 
 // The water fill's polygon filter already includes every water kind, so a stored sea polygon needs no style change.

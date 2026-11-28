@@ -3,18 +3,30 @@ import {inDrawingGroup} from './drawing-order.js';
 
 // The Penpot hills rules suggest contours from zoom 15; the tiles carry every 20 m line from zoom 14.
 const contourMinZoom = 15;
-const contourOpacity = 0.28;
+const thinContourWidth = 0.7;
+const indexContourWidth = 1.4;
+const thinContourOpacity = 0.28;
+const indexContourOpacity = 0.45;
+const indexElevationIntervalMetres = 100;
 
-// One contour type every 20 m: thin and light, no darker index lines.
-function contourLineLayer() {
+// Version 5 drops the stored `index` flag: a contour is an index line when its own height divides by 100 m.
+const contourElevation = ['to-number', ['get', 'elevation'], 0];
+const isContourGeometry = ['==', ['geometry-type'], 'LineString'];
+const hasContourElevation = ['has', 'elevation'];
+const isIndexContour = ['==', ['%', contourElevation, indexElevationIntervalMetres], 0];
+const isOrdinaryContour = ['all', isContourGeometry, hasContourElevation, ['!', isIndexContour]];
+const isIndexedContour = ['all', isContourGeometry, hasContourElevation, isIndexContour];
+
+function contourLineLayer({id, sourceLayer, filter, width = thinContourWidth, opacity = thinContourOpacity}) {
   return inDrawingGroup('contour-lines', {
-    id: 'contour-lines',
+    id,
     type: 'line',
     source: 'basemap',
-    'source-layer': 'contours',
+    'source-layer': sourceLayer,
     minzoom: contourMinZoom,
+    ...(filter ? {filter} : {}),
     layout: {'line-join': 'round'},
-    paint: {'line-color': colors.contour, 'line-opacity': contourOpacity, 'line-width': 0.7}
+    paint: {'line-color': colors.contour, 'line-opacity': opacity, 'line-width': width}
   });
 }
 
@@ -23,13 +35,14 @@ function contourLineLayer() {
 // The halo hides the faint line under the digits, the design's small gap. Its colour sits halfway between land and the
 // sunlit slope, thin and soft, so it reads as a gap on both. The labels are drawn with the labels group, above streets,
 // so a street never covers a height.
-function contourLabelLayer() {
+function contourLabelLayer({id, sourceLayer, filter}) {
   return inDrawingGroup('labels', {
-    id: 'contour-labels',
+    id,
     type: 'symbol',
     source: 'basemap',
-    'source-layer': 'contours',
+    'source-layer': sourceLayer,
     minzoom: contourMinZoom,
+    ...(filter ? {filter} : {}),
     layout: {
       'symbol-placement': 'line',
       'symbol-spacing': 400,
@@ -49,10 +62,30 @@ function contourLabelLayer() {
   });
 }
 
+// Today's `contours` layer stays untouched: it carries every height line and the published `index` flag. Version 5
+// publishes contour and summit geometry together in `relief`, so its layers select line geometry and derive the index
+// from `elevation`. An archive without a `relief` layer matches none of them and keeps today's look.
 export function contourLayers() {
-  return [contourLineLayer()];
+  return [
+    contourLineLayer({id: 'contour-lines', sourceLayer: 'contours'}),
+    contourLineLayer({id: 'relief-contour-lines', sourceLayer: 'relief', filter: isOrdinaryContour}),
+    contourLineLayer({
+      id: 'index-contour-lines',
+      sourceLayer: 'relief',
+      filter: isIndexedContour,
+      width: indexContourWidth,
+      opacity: indexContourOpacity
+    })
+  ];
 }
 
 export function contourLabelLayers() {
-  return [contourLabelLayer()];
+  return [
+    contourLabelLayer({id: 'contour-labels', sourceLayer: 'contours'}),
+    contourLabelLayer({
+      id: 'relief-contour-labels',
+      sourceLayer: 'relief',
+      filter: ['all', isContourGeometry, hasContourElevation]
+    })
+  ];
 }

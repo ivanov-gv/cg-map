@@ -53,14 +53,32 @@ tile layer (`kind: shade`) with the shaded tone, over green areas and below road
 while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged until data switches.
 `createMap` adds the summit triangle when the style first asks for it, since the style has no sprite.
 
-Contour lines are one faint type every 20 m. Their heights are labels along each line, kept un-flipped: the relief
-contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along
-each line; the wiki's single column down a hill's sunlit slope is not reproduced.
+Contours in today's `contours` tile layer stay one faint type every 20 m. Version 5 merges contours and summits into
+`relief`; its layers select line geometry and derive the index from the feature's own `elevation`: lines divisible by
+100 m are bold, the rest thin. Their heights are labels along each line, kept un-flipped: the relief contract runs every
+contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along each line; the
+wiki's single column down a hill's sunlit slope is not reproduced. The `relief` layers match no feature in today's
+archive, so nothing changes there.
 
-Walking paths are drawn by what they are to a walker: park routes (main paths with `inGreenArea`) as a cream path over a
-casing, trails and city footpaths as quiet round dots, stairways with a step pattern. Meadows fill only land areas with
-the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an application that
-hit-tests walking paths by layer id adds them when it upgrades.
+Settlement labels read version-5 points in `settlements`: a feature needs its own `place`, and its text size comes from
+`place` and `population`: city 13 px, town 11 px, village 9 px, smaller places 8 px. A higher population promotes a
+place to the next band. Today's points carry `rank` but no `place`, so `settlement-labels` draws none; the public app's
+existing city-name layer still supplies those labels. The rules are in
+[src/settlement-layers.js](src/settlement-layers.js).
+
+Walking paths are drawn by what they are to a walker: stored `pathClass: park` as a cream path over a casing,
+`pathClass: trail` and `pathClass: city` as quiet round dots, and stairways with a step pattern. Today's tiles store
+`main` instead of `park`/`city`, so a main path still uses `inGreenArea` to pick its pattern, and a path with no class
+still uses the trail pattern; those are the only legacy fallbacks. Meadows fill only land areas with the `destination`
+flag. The park routes are new layers, `park-route-casing` and `park-routes`: an application that hit-tests walking paths
+by layer id adds them when it upgrades.
+
+POI symbols come from the feature's own `kind`, with the kind-to-category table in
+[src/place-category.js](src/place-category.js). The three kinds that occur in two categories today (`fuel`, `hotel`,
+`yes`) keep reading a stored `category` when one is present, so their current symbols stay; the rest ignore that legacy
+field. Marker identity, co-location groups, tap hits and `activeIds` use `entityId`; apps/web and apps/core-demo still
+pin data 0.1.0, whose places have no `entityId`, so a POI without one uses its legacy `id`. apps/editor pins 0.2.0,
+which already publishes `entityId`.
 
 ## Lifecycle
 
