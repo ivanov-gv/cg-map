@@ -47,11 +47,14 @@ The `water` fill paints every polygon in the `water` tile layer with the open-wa
 polygon with `kind: sea` from the version-5 surface data. Its filter is already kind-agnostic, so publishing the sea
 needs no style change; coastline lines stay separate and get no river stroke.
 
-Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
-and park names along the `green_area_labels` lines. The `shades` layer paints stored shade polygons from the `shades`
-tile layer (`kind: shade`) with the shaded tone, over green areas and below roads. The `slopes` and `ridges` layers stay
-while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged until data switches.
-`createMap` adds the summit triangle when the style first asks for it, since the style has no sprite.
+Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m"
+taken from the summit's own stored `ele` rounded to whole metres, and park names along the `green_area_labels` lines. A
+summit without `ele` shows its name alone: the terrain model's `demElevation` is never substituted
+([ADR 0049](../../docs/decisions/0049-data-stored-as-shown.md)). The `shades` layer paints stored shade polygons from
+the `shades` tile layer (`kind: shade`) with the shaded tone, over green areas and below roads. The `slopes` and
+`ridges` layers stay while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged
+until data switches. `createMap` adds the summit triangle when the style first asks for it, since the style has no
+sprite.
 
 Contour lines stay one faint type every 20 m in data's `contours` tile layer. map-core reads no stored `index` flag:
 that flag belongs to data's tile build, where it decides which lines survive low zoom. Their heights are labels along
