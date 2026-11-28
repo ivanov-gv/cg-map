@@ -186,9 +186,23 @@ test('editing rules are versioned by the bundle version the Editor loads', () =>
   delete releasedRules.bundleRules;
   assert.equal(validate(schema, releasedRules), true, 'a released rules document without bundleRules must validate');
   const propertySchema = schema.$defs.layerRules.additionalProperties.properties.properties.additionalProperties.properties;
-  for (const key of ['requiredForKinds', 'allowedForKinds', 'requiredWithAny', 'requiredWithAnyForKinds']) {
+  for (const key of [
+    'requiredForKinds',
+    'allowedForKinds',
+    'requiredWithAny',
+    'requiredWithAnyForKinds',
+    'exclusiveMaximum'
+  ]) {
     assert.ok(propertySchema[key], `${key} must be part of the rules schema`);
   }
+  assert.match(
+    propertySchema.pattern.description,
+    /every item matches this pattern.*Version-5 identifier patterns match entity IDs/
+  );
+  assert.match(
+    propertySchema.type.description,
+    /released versions.*OSM number.*version 5.*entity ID/
+  );
 });
 
 test('version 5 keeps the released rules for files the model does not change', () => {
@@ -285,7 +299,21 @@ test('version 5 surface rules carry shared-area kinds, links and stored frame fa
   assert.deepEqual(surface.properties.riverEntityId, {pattern: entityIdPattern, reference: 'surface.geojson'});
   assert.deepEqual(surface.properties.labelPoint, {type: 'position'});
   assert.deepEqual(surface.properties.labelLine, {type: 'positions'});
-  assert.deepEqual(surface.properties.iconPoint, {type: 'position'});
+  assert.deepEqual(surface.properties.iconPoint, {
+    type: 'position',
+    allowedForKinds: ['lake'],
+    requiredWithAnyForKinds: {kinds: ['lake'], any: ['poiKind']}
+  });
+  assert.deepEqual(surface.properties.name.requiredForKinds, ['context', 'protected-area']);
+  assert.deepEqual(surface.properties.osmTag, {
+    maxLength: 64,
+    addOnly: true,
+    requiredForKinds: ['protected-area']
+  });
+  assert.deepEqual(surface.properties.destination, {
+    type: 'boolean',
+    allowedForKinds: ['park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground']
+  });
   assert.deepEqual(surface.properties.visibilityOverride, {type: 'integer', minimum: 1, maximum: 5});
   for (const name of poiProperties) {
     assert.ok(Object.hasOwn(surface.properties, name), name);
@@ -326,9 +354,31 @@ test('version 5 roads hold streets, junctions and turn restrictions without end 
   for (const name of ['crossing', 'traffic_signals', 'restriction', 'from', 'to', 'viaNodes', 'viaWays']) {
     assert.ok(Object.hasOwn(roads.properties, name), name);
   }
-  for (const name of ['startNode', 'endNode', 'viaNodes', 'viaWays', 'from', 'to']) {
+  for (const name of ['startNode', 'endNode']) {
     assert.deepEqual(roads.properties[name], {pattern: entityIdPattern, reference: 'roads.geojson'}, name);
   }
+  for (const name of ['from', 'to']) {
+    assert.deepEqual(roads.properties[name], {
+      pattern: entityIdPattern,
+      reference: 'roads.geojson',
+      requiredForKinds: ['restriction'],
+      allowedForKinds: ['restriction']
+    }, name);
+  }
+  assert.deepEqual(roads.properties.restriction.requiredForKinds, ['restriction']);
+  assert.deepEqual(roads.properties.restriction.allowedForKinds, ['restriction']);
+  assert.deepEqual(roads.properties.viaNodes, {
+    type: 'identifiers',
+    pattern: '^(node/[1-9][0-9]*|local:[0-9a-f-]{36})$',
+    reference: 'roads.geojson',
+    allowedForKinds: ['restriction']
+  });
+  assert.deepEqual(roads.properties.viaWays, {
+    type: 'identifiers',
+    pattern: '^(way/[1-9][0-9]*|local:[0-9a-f-]{36})$',
+    reference: 'roads.geojson',
+    allowedForKinds: ['restriction']
+  });
   for (const kind of ['street', 'junction', 'restriction']) {
     assert.ok(roads.properties.kind.enum.includes(kind), kind);
   }
@@ -342,11 +392,24 @@ test('version 5 buildings carry entrances, labels and business tags in one file'
   assert.deepEqual(buildings.properties.kind.enum, ['building', 'entrance']);
   assert.deepEqual(buildings.properties['addr:streetEntityId'], {pattern: entityIdPattern, reference: 'roads.geojson'});
   assert.deepEqual(buildings.properties.labelPoint, {type: 'position'});
-  assert.deepEqual(buildings.properties.labelBearing, {type: 'number', minimum: 0, maximum: 360});
-  assert.deepEqual(buildings.properties.iconPoint, {type: 'position'});
+  assert.deepEqual(buildings.properties.labelBearing, {
+    type: 'number',
+    minimum: 0,
+    exclusiveMaximum: 360,
+    allowedForKinds: ['building', 'entrance']
+  });
+  assert.deepEqual(buildings.properties.building.requiredForKinds, ['building']);
+  assert.deepEqual(buildings.properties.building.allowedForKinds, ['building']);
+  assert.deepEqual(buildings.properties.entrance.requiredForKinds, ['entrance']);
+  assert.deepEqual(buildings.properties.entrance.allowedForKinds, ['entrance']);
   assert.deepEqual(buildings.properties.ref, {maxLength: 128});
   assert.deepEqual(buildings.properties.ref, releasedLayerRules()['building-entrances.geojson'].properties.ref);
-  assert.deepEqual(buildings.properties.buildingEntityId, {pattern: entityIdPattern, reference: 'buildings.geojson'});
+  assert.deepEqual(buildings.properties.buildingEntityId, {
+    pattern: entityIdPattern,
+    reference: 'buildings.geojson',
+    requiredForKinds: ['entrance'],
+    allowedForKinds: ['entrance']
+  });
   assert.deepEqual(buildings.properties.visibilityOverride, {type: 'integer', minimum: 1, maximum: 5});
   for (const name of ['addr:city', 'addr:postcode', 'addr:flats', 'addr:floor', 'entrance', 'door', 'wheelchair']) {
     assert.ok(Object.hasOwn(buildings.properties, name), `${name} is kept for a merged entrance`);
@@ -382,13 +445,15 @@ test('version 5 places and settlements follow links instead of storing derived f
   assert.deepEqual(settlementProperties.settlementEntityId, {
     pattern: entityIdPattern,
     reference: 'settlements.geojson',
-    requiredForKinds: ['settlement-area']
+    requiredForKinds: ['settlement-area'],
+    allowedForKinds: ['settlement-area']
   });
   for (const name of ['name', 'place', 'source']) {
     assert.equal(Object.hasOwn(settlementProperties[name], 'required'), false, name);
     assert.deepEqual(settlementProperties[name].requiredForKinds, ['settlement'], name);
     assert.deepEqual(settlementProperties[name].allowedForKinds, ['settlement'], name);
   }
+  assert.deepEqual(settlementProperties.population, {type: 'integer', minimum: 0, allowedForKinds: ['settlement']});
   for (const name of ['rank', 'municipality', 'minzoom']) {
     assert.equal(Object.hasOwn(layers['settlements.geojson'].properties, name), false, name);
     assert.ok(Object.hasOwn(released['settlements.geojson'].properties, name), `${name} stays in released rules`);
@@ -407,7 +472,17 @@ test('version 5 relief and rims leave derived values out', () => {
   assert.ok(Object.hasOwn(released['summits.geojson'].properties, 'minzoom'), 'released summits stay frozen');
   assert.deepEqual(layers['relief.geojson'].properties.elevation.requiredForKinds, ['contour']);
   assert.deepEqual(layers['relief.geojson'].properties.elevation.allowedForKinds, ['contour']);
-  assert.deepEqual(layers['relief.geojson'].properties.iconPoint, {type: 'position'});
+  assert.deepEqual(layers['relief.geojson'].properties.ele, {
+    type: 'number',
+    minimum: -10,
+    maximum: 2600,
+    allowedForKinds: ['summit']
+  });
+  assert.deepEqual(layers['relief.geojson'].properties.natural, {
+    enum: ['peak', 'hill'],
+    requiredForKinds: ['summit'],
+    allowedForKinds: ['summit']
+  });
   assert.deepEqual(layers['relief.geojson'].properties.visibilityOverride, {type: 'integer', minimum: 1, maximum: 5});
   for (const name of poiProperties) {
     assert.ok(Object.hasOwn(layers['relief.geojson'].properties, name), name);
@@ -445,77 +520,18 @@ test('version 5 shares one POI-kind vocabulary with every object that is a POI',
     assert.deepEqual(poiKind.enum, vocabulary, filename);
     assert.deepEqual(poiKind.allowedForKinds, [kind], filename);
     assert.deepEqual(poiKind.requiredWithAnyForKinds, {kinds: [kind], any: triggers}, filename);
+    assert.deepEqual(layers[filename].properties.iconPoint, {
+      type: 'position',
+      allowedForKinds: [kind],
+      requiredWithAnyForKinds: {kinds: [kind], any: ['poiKind']}
+    }, filename);
   }
 });
 
-test('version 5 transit files reference stop IDs, not embedded stop facts', () => {
+test('version 5 transit rules keep routes released and the network read-only', () => {
   const layers = version5LayerRules();
-  assert.deepEqual(layers['transit-network.json'].operations, ['add', 'modify', 'delete']);
-  assert.deepEqual(layers['transit-network.json'].geometries, ['None']);
-  assert.deepEqual(layers['transit-network.json'].properties.stopId, {
-    required: true,
-    maxLength: 64,
-    pattern: '^[A-Za-z0-9_-]+$',
-    reference: 'transport-stops.geojson'
-  });
-  assert.deepEqual(layers['transit-network.json'].properties.stops, {
-    type: 'stopIds',
-    reference: 'transport-stops.geojson'
-  });
-  assert.deepEqual(layers['transit-routes.json'].properties.directions, {
-    required: true,
-    type: 'directions-v5',
-    reference: 'transport-stops.geojson'
-  });
-  assert.equal(
-    readJSON('editor-layers.schema.json').$defs.layerRules.additionalProperties.properties.properties
-      .additionalProperties.properties.type.enum.includes('directions-v5'),
-    true
-  );
-});
-
-// The content schemas are checked here because the rules only declare the shape of one feature property.
-test('version 5 transit schemas keep stop IDs and genuine turn points and reject derived facts', () => {
-  const routeSchema = readJSON('transit-routes-v5.schema.json');
-  const networkSchema = readJSON('transit-network-v5.schema.json');
-  const routeWith = directions => ({
-    version: 5,
-    retrievedAt: '2026-11-27T10:00:00Z',
-    source: 'ePodgorica',
-    routes: [{network: 'bus', directions}]
-  });
-  const directions = [{headsign: 'Centar', stops: ['1', {turn: [19.26, 42.44]}, '2']}];
-  assert.equal(validate(routeSchema, routeWith(directions)), true);
-  assert.equal(validate(routeSchema, {...routeWith(directions), version: 1}), false);
-  assert.equal(
-    validate(routeSchema, routeWith([{headsign: 'Centar', stops: [{stopId: '1'}, {name: 'Centar'}]}])),
-    false,
-    'a legacy direction with stop names is not version 5'
-  );
-  assert.equal(
-    validate(routeSchema, {...routeWith(directions), routes: [{network: 'bus', directions, endpointCity: 'Podgorica'}]}),
-    false,
-    'a derived endpoint is not stored'
-  );
-  const network = {
-    version: 5,
-    retrievedAt: '2026-11-27T10:00:00Z',
-    source: 'ePodgorica',
-    stops: {1: {name: 'Centar', coordinates: [19.26, 42.44]}},
-    patterns: [{route: '1', name: '1', headsign: 'Centar', stops: ['1', '1'], offsets: [0, 600]}]
-  };
-  assert.equal(validate(networkSchema, network), true);
-  assert.equal(validate(networkSchema, {...network, version: 1}), false);
-  assert.equal(
-    validate(networkSchema, {...network, patterns: [{...network.patterns[0], stops: ['Centar 1', '1']}]}),
-    false,
-    'a pattern names stops by ID'
-  );
-  assert.equal(
-    validate(networkSchema, {...network, stops: {1: {name: 'Centar', coordinates: [19.26]}}}),
-    false,
-    'a stop has one WGS84 position'
-  );
+  assert.deepEqual(layers['transit-routes.json'], releasedLayerRules()['transit-routes.json']);
+  assert.deepEqual(layers['transit-network.json'], {operations: [], geometries: ['None'], properties: {}});
 });
 
 test('canyon rims state one optional whole-metre width beside their height', () => {

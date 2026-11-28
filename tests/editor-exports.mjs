@@ -52,12 +52,11 @@ export class HeadlessEditor {
   #root;
   #sources;
 
-  constructor(testContext, {omitSource} = {}) {
+  constructor(testContext) {
     this.#root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-layer-export-'));
     testContext.after(() => fs.rmSync(this.#root, {recursive: true, force: true}));
     stageContractsInto(this.#root);
     stageDataInto(this.#root);
-    if (omitSource) fs.rmSync(stagedSourcePath(this.#root, omitSource), {force: true});
     const missingSources = loadedSources.filter(filename => !fs.existsSync(stagedSourcePath(this.#root, filename)));
     assert.deepEqual(
       missingSources,

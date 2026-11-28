@@ -62,13 +62,17 @@
                 },
                 "forbiddenValues": {"type": "array", "items": {"type": "string"}},
                 "type": {
-                  "description": "Text when absent. directions is the released ordered stop list of a route; directions-v5 is the version-5 stop-ID list with genuine turn points; stopIds is a list of transport stop IDs; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; a position is a WGS84 longitude/latitude pair and positions is a line of them; an identifier is an OSM number or the local ID of an object added in the editor, and identifiers are a list of them.",
-                  "enum": ["integer", "number", "boolean", "list", "position", "positions", "identifier", "identifiers", "directions", "directions-v5", "stopIds", "entrances"]
+                  "description": "Text when absent. directions is the released ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; a position is a WGS84 longitude/latitude pair and positions is a line of them; at released versions an identifier is an OSM number or a local ID, while in version 5 its pattern names an entity ID or the local ID of an object added in the editor; identifiers are an ordered list of them.",
+                  "enum": ["integer", "number", "boolean", "list", "position", "positions", "identifier", "identifiers", "directions", "entrances"]
                 },
                 "minimum": {"type": "number"},
                 "maximum": {"type": "number"},
+                "exclusiveMaximum": {"type": "number"},
                 "multipleOf": {"type": "number"},
-                "pattern": {"type": "string"},
+                "pattern": {
+                  "description": "For list or identifiers values, every item matches this pattern; otherwise the text matches it. Version-5 identifier patterns match entity IDs.",
+                  "type": "string"
+                },
                 "allowsNull": {"description": "A missing fact is recorded as null.", "type": "boolean"},
                 "reference": {
                   "description": "The named file holds the object identified by the value: an entity ID, a stop ID or a list of either.",

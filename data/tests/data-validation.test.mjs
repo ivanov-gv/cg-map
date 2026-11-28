@@ -1312,6 +1312,20 @@ test('stop lines match routes and route stops exist in stops file', () => {
   validateStopsAndRoutes(stops, routes);
 });
 
+test('network pattern stops exist in stops file', () => {
+  const stops = JSON.parse(fs.readFileSync('data/sources/transport-stops.geojson'));
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  const network = JSON.parse(fs.readFileSync('data/sources/transit-network.json'));
+  validateStopsAndRoutes(stops, routes, network);
+
+  const broken = structuredClone(network);
+  broken.patterns[0].stops[0] = 'missing-stop';
+  assert.throws(
+    () => validateStopsAndRoutes(stops, routes, broken),
+    /Pattern references stop missing-stop not in transport-stops.geojson/
+  );
+});
+
 test('stop-routes cross-check catches mismatched lines', () => {
   const stops = JSON.parse(fs.readFileSync('data/sources/transport-stops.geojson'));
   const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
