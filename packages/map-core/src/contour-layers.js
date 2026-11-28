@@ -9,24 +9,27 @@ const thinContourOpacity = 0.28;
 const indexContourOpacity = 0.45;
 const indexElevationIntervalMetres = 100;
 
-// Version 5 drops the stored `index` flag: a contour is an index line when its own height divides by 100 m.
+// Data keeps publishing contours in `contours`. Each line already carries its own height, so the style derives the
+// index band from `elevation` instead of reading the stored `index` flag that data will drop.
 const contourElevation = ['to-number', ['get', 'elevation'], 0];
-const isContourGeometry = ['==', ['geometry-type'], 'LineString'];
-const hasContourElevation = ['has', 'elevation'];
 const isIndexContour = ['==', ['%', contourElevation, indexElevationIntervalMetres], 0];
-const isOrdinaryContour = ['all', isContourGeometry, hasContourElevation, ['!', isIndexContour]];
-const isIndexedContour = ['all', isContourGeometry, hasContourElevation, isIndexContour];
 
-function contourLineLayer({id, sourceLayer, filter, width = thinContourWidth, opacity = thinContourOpacity}) {
+export const contourLineWidth = ['case', isIndexContour, indexContourWidth, thinContourWidth];
+export const contourLineOpacity = ['case', isIndexContour, indexContourOpacity, thinContourOpacity];
+
+function contourLineLayer() {
   return inDrawingGroup('contour-lines', {
-    id,
+    id: 'contour-lines',
     type: 'line',
     source: 'basemap',
-    'source-layer': sourceLayer,
+    'source-layer': 'contours',
     minzoom: contourMinZoom,
-    ...(filter ? {filter} : {}),
     layout: {'line-join': 'round'},
-    paint: {'line-color': colors.contour, 'line-opacity': opacity, 'line-width': width}
+    paint: {
+      'line-color': colors.contour,
+      'line-opacity': contourLineOpacity,
+      'line-width': contourLineWidth
+    }
   });
 }
 
@@ -35,14 +38,13 @@ function contourLineLayer({id, sourceLayer, filter, width = thinContourWidth, op
 // The halo hides the faint line under the digits, the design's small gap. Its colour sits halfway between land and the
 // sunlit slope, thin and soft, so it reads as a gap on both. The labels are drawn with the labels group, above streets,
 // so a street never covers a height.
-function contourLabelLayer({id, sourceLayer, filter}) {
+function contourLabelLayer() {
   return inDrawingGroup('labels', {
-    id,
+    id: 'contour-labels',
     type: 'symbol',
     source: 'basemap',
-    'source-layer': sourceLayer,
+    'source-layer': 'contours',
     minzoom: contourMinZoom,
-    ...(filter ? {filter} : {}),
     layout: {
       'symbol-placement': 'line',
       'symbol-spacing': 400,
@@ -62,30 +64,10 @@ function contourLabelLayer({id, sourceLayer, filter}) {
   });
 }
 
-// Today's `contours` layer stays untouched: it carries every height line and the published `index` flag. Version 5
-// publishes contour and summit geometry together in `relief`, so its layers select line geometry and derive the index
-// from `elevation`. An archive without a `relief` layer matches none of them and keeps today's look.
 export function contourLayers() {
-  return [
-    contourLineLayer({id: 'contour-lines', sourceLayer: 'contours'}),
-    contourLineLayer({id: 'relief-contour-lines', sourceLayer: 'relief', filter: isOrdinaryContour}),
-    contourLineLayer({
-      id: 'index-contour-lines',
-      sourceLayer: 'relief',
-      filter: isIndexedContour,
-      width: indexContourWidth,
-      opacity: indexContourOpacity
-    })
-  ];
+  return [contourLineLayer()];
 }
 
 export function contourLabelLayers() {
-  return [
-    contourLabelLayer({id: 'contour-labels', sourceLayer: 'contours'}),
-    contourLabelLayer({
-      id: 'relief-contour-labels',
-      sourceLayer: 'relief',
-      filter: ['all', isContourGeometry, hasContourElevation]
-    })
-  ];
+  return [contourLabelLayer()];
 }

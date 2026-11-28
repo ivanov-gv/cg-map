@@ -53,17 +53,18 @@ tile layer (`kind: shade`) with the shaded tone, over green areas and below road
 while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged until data switches.
 `createMap` adds the summit triangle when the style first asks for it, since the style has no sprite.
 
-Contours in today's `contours` tile layer stay one faint type every 20 m. Version 5 merges contours and summits into
-`relief`; its layers select line geometry and derive the index from the feature's own `elevation`: lines divisible by
-100 m are bold, the rest thin. Their heights are labels along each line, kept un-flipped: the relief contract runs every
-contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along each line; the
-wiki's single column down a hill's sunlit slope is not reproduced. The `relief` layers match no feature in today's
-archive, so nothing changes there.
+Contours stay in the `contours` tile layer; data will not rename that build output when source files merge. One line
+layer derives the index band from each feature's own `elevation`: lines divisible by 100 m are bold and more opaque, the
+rest thin and faint, with no read of the stored `index` flag. Today's contours already carry `elevation`, so their index
+lines gain that emphasis now; no second tile layer is needed. Their heights are labels along each line, kept un-flipped:
+the relief contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the
+labels along each line; the wiki's single column down a hill's sunlit slope is not reproduced.
 
-Settlement labels read version-5 points in `settlements`: a feature needs its own `place`, and its text size comes from
-`place` and `population`: city 13 px, town 11 px, village 9 px, smaller places 8 px. A higher population promotes a
-place to the next band. Today's points carry `rank` but no `place`, so `settlement-labels` draws none; the public app's
-existing city-name layer still supplies those labels. The rules are in
+Settlement labels use the one `settlements` tile layer. A feature with `place` takes its text size from `place` and
+`population`: city 13 px, town 11 px, village 9 px, smaller places 8 px, with a higher population promoting a place to
+the next band. A feature without `place` but with the published `rank` keeps today's bands (capital or city 13 px, town
+11 px, village 9 px, others 8 px) until the data step publishes `place` everywhere and drops `rank`; population never
+overrides that rank-based case. Features with neither are ignored. The rules are in
 [src/settlement-layers.js](src/settlement-layers.js).
 
 Walking paths are drawn by what they are to a walker: stored `pathClass: park` as a cream path over a casing,
