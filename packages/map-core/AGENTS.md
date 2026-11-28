@@ -8,6 +8,8 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
 - This package is a contract for every map application. tools/ and assets/ are part of it; keep them free of any one
   application's knowledge. Tests read shared formats from the exact `@ivanov-gv/map-contracts` devDependency; runtime
   src/ never imports contracts.
+- map-core alone defines how the map looks: it draws every map feature and label for Web and the Editor, which add only
+  their own interaction layers ([decision 0051](../../docs/decisions/0051-map-core-defines-the-map-look.md)).
 - Keep source GeoJSON immutable; source identity and editing permissions belong to consumers.
 - New capabilities need a control in apps/core-demo and consumer coverage. Preserve the public app's offline module
   inventory.
