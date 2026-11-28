@@ -3,20 +3,9 @@ import {inDrawingGroup} from './drawing-order.js';
 
 // The Penpot hills rules suggest contours from zoom 15; the tiles carry every 20 m line from zoom 14.
 const contourMinZoom = 15;
-const thinContourWidth = 0.7;
-const indexContourWidth = 1.4;
-const thinContourOpacity = 0.28;
-const indexContourOpacity = 0.45;
-const indexElevationIntervalMetres = 100;
+const contourOpacity = 0.28;
 
-// Data keeps publishing contours in `contours`. Each line already carries its own height, so the style derives the
-// index band from `elevation` instead of reading the stored `index` flag that data will drop.
-const contourElevation = ['to-number', ['get', 'elevation'], 0];
-const isIndexContour = ['==', ['%', contourElevation, indexElevationIntervalMetres], 0];
-
-export const contourLineWidth = ['case', isIndexContour, indexContourWidth, thinContourWidth];
-export const contourLineOpacity = ['case', isIndexContour, indexContourOpacity, thinContourOpacity];
-
+// One contour type every 20 m: thin and light, no darker index lines.
 function contourLineLayer() {
   return inDrawingGroup('contour-lines', {
     id: 'contour-lines',
@@ -25,11 +14,7 @@ function contourLineLayer() {
     'source-layer': 'contours',
     minzoom: contourMinZoom,
     layout: {'line-join': 'round'},
-    paint: {
-      'line-color': colors.contour,
-      'line-opacity': contourLineOpacity,
-      'line-width': contourLineWidth
-    }
+    paint: {'line-color': colors.contour, 'line-opacity': contourOpacity, 'line-width': 0.7}
   });
 }
 

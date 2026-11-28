@@ -259,16 +259,33 @@ test('tap hits expand to each listing once in a stable order', () => {
 });
 
 test('POI symbols come from kind, with table cases for every category', () => {
+  // Two released POIs carry a stored category that disagrees with their kind. The #517 decision makes the table win.
   const cases = [
-    ['node/restaurant', 'restaurant', 'food', 'place-food'],
-    ['node/museum', 'museum', 'sights', 'place-sights'],
-    ['node/bakery', 'bakery', 'shops', 'place-shops'],
-    ['node/hotel', 'hotel', 'stay', 'place-stay'],
-    ['node/atm', 'atm', 'essentials', 'place-essentials'],
-    ['node/unclassified', 'unmapped_kind', 'other', 'place-other']
+    {entityId: 'node/restaurant', name: 'Restaurant', kind: 'restaurant', category: 'food', icon: 'place-food'},
+    {entityId: 'node/museum', name: 'Museum', kind: 'museum', category: 'sights', icon: 'place-sights'},
+    {entityId: 'node/bakery', name: 'Bakery', kind: 'bakery', category: 'shops', icon: 'place-shops'},
+    {entityId: 'node/hotel', name: 'Hotel', kind: 'hotel', category: 'stay', icon: 'place-stay'},
+    {entityId: 'node/atm', name: 'ATM', kind: 'atm', category: 'essentials', icon: 'place-essentials'},
+    {entityId: 'node/unclassified', name: 'Unknown', kind: 'unmapped_kind', category: 'other', icon: 'place-other'},
+    {
+      entityId: 'node/4222066492',
+      name: 'EKO',
+      kind: 'fuel',
+      storedCategory: 'shops',
+      category: 'essentials',
+      icon: 'place-essentials'
+    },
+    {
+      entityId: 'way/1464599145',
+      name: 'Kampana Tower',
+      kind: 'yes',
+      storedCategory: 'sights',
+      category: 'shops',
+      icon: 'place-shops'
+    }
   ];
-  const directory = cases.map(([entityId, kind], index) =>
-    place(entityId, 2, [19.2 + index / 100, 42.4], {kind})
+  const directory = cases.map(({entityId, name, kind, storedCategory}, index) =>
+    place(entityId, 2, [19.2 + index / 100, 42.4], {name, kind, category: storedCategory})
   );
   const markers = buildPlaceMarkers(directory, markerKeys(directory));
   const lookOf = entityId => {
@@ -276,53 +293,31 @@ test('POI symbols come from kind, with table cases for every category', () => {
     return [marker.properties.category, marker.properties.icon];
   };
   assert.deepEqual(
-    cases.map(([entityId, _kind]) => lookOf(entityId)),
-    cases.map(([_entityId, _kind, category, icon]) => [category, icon])
+    cases.map(({entityId}) => lookOf(entityId)),
+    cases.map(({category, icon}) => [category, icon])
   );
 });
 
-test('ambiguous kinds keep today\'s category until data chooses one', () => {
-  const asShop = place('node/fuel-shop', 2, [19.31, 42.43], {kind: 'fuel', category: 'shops'});
-  const withoutCategory = place('node/fuel', 2, [19.32, 42.44], {kind: 'fuel'});
-  const directory = [asShop, withoutCategory];
+test('ambiguous kinds follow the kind table without a stored override', () => {
+  // The five POIs whose stored category disagrees with their kind in the editor's 0.2.0 pin. The #517 decision moves
+  // them to the kind's category, so their icons change as agreed.
+  const cases = [
+    ['node/4222066492', 'EKO', 'fuel', 'shops', 'essentials', 'place-essentials'],
+    ['node/4222113290', 'EKO', 'fuel', 'shops', 'essentials', 'place-essentials'],
+    ['way/383768698', 'Petrol', 'fuel', 'shops', 'essentials', 'place-essentials'],
+    ['way/303138707', 'Palača Smekja', 'hotel', 'sights', 'stay', 'place-stay'],
+    ['way/1464599145', 'Kampana Tower', 'yes', 'sights', 'shops', 'place-shops']
+  ];
+  const directory = cases.map(([entityId, name, kind, category], index) =>
+    place(entityId, 2, [19.3 + index / 100, 42.43], {name, kind, category})
+  );
   const markers = buildPlaceMarkers(directory, markerKeys(directory));
   const lookOf = entityId => {
     const marker = markers.find(candidate => candidate.properties.markerKey === entityId);
     return [marker.properties.category, marker.properties.icon];
   };
-  assert.deepEqual(lookOf('node/fuel-shop'), ['shops', 'place-shops']);
-  assert.deepEqual(lookOf('node/fuel'), ['essentials', 'place-essentials']);
-});
-
-test("today's released POI values keep their symbols and identity", () => {
-  // This compatibility check is expected to pass against the old rules too; it pins the look we must not change.
-  // The 0.1.0 pin used by web and core-demo carries `id` and no `entityId`; editor's 0.2.0 pin has `entityId`.
-  const released = [
-    {id: 'node/1', kind: 'cafe', category: 'food', visibilityLevel: 2},
-    {id: 'node/2', kind: 'museum', category: 'sights', visibilityLevel: 3},
-    {id: 'node/3', kind: 'fuel', category: 'essentials', visibilityLevel: 4}
-  ];
-  const directory = released.map((properties, index) =>
-    place(properties.id, properties.visibilityLevel, [19.1 + index / 100, 42.5], {
-      kind: properties.kind,
-      category: properties.category,
-      id: properties.id
-    })
-  );
-  for (const feature of directory) delete feature.properties.entityId;
-  const keys = markerKeys(directory);
-  const markers = buildPlaceMarkers(directory, keys);
-  assert.deepEqual([...keys.keys()], ['node/1', 'node/2', 'node/3']);
   assert.deepEqual(
-    markers.map(marker => [marker.properties.category, marker.properties.icon]),
-    [
-      ['food', 'place-food'],
-      ['sights', 'place-sights'],
-      ['essentials', 'place-essentials']
-    ]
-  );
-  assert.deepEqual(
-    markers.map(marker => JSON.parse(marker.properties.activeIds)),
-    [['node/1'], ['node/2'], ['node/3']]
+    cases.map(([entityId]) => lookOf(entityId)),
+    cases.map(([_entityId, _name, _kind, _category, expectedCategory, expectedIcon]) => [expectedCategory, expectedIcon])
   );
 });

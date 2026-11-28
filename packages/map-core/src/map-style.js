@@ -4,7 +4,6 @@ import {canyonLayers} from './canyon-layers.js';
 import {hillLabelLayers, shadeLayers, slopeLayers} from './hill-layers.js';
 import {contourLabelLayers, contourLayers} from './contour-layers.js';
 import {railwayLabelLayers, railwayLayers} from './railway-layers.js';
-import {settlementLabelLayers} from './settlement-layers.js';
 
 const source = 'basemap';
 const roadKind = ['get', 'kind'];
@@ -286,7 +285,7 @@ const pathClass = ['get', 'pathClass'];
 const isInGreenArea = ['==', ['get', 'inGreenArea'], true];
 const isParkRoute = [
   'all',
-  roadKindFilter(['footway', 'path', 'cycleway']),
+  roadKindFilter(['footway', 'path', 'track', 'cycleway']),
   [
     'any',
     ['==', pathClass, 'park'],
@@ -301,7 +300,7 @@ const isTrail = [
 ];
 const isCityFootpath = [
   'all',
-  roadKindFilter(['footway', 'path']),
+  roadKindFilter(['footway', 'path', 'track']),
   [
     'any',
     ['==', pathClass, 'city'],
@@ -479,8 +478,7 @@ export function mapStyle(basemapURL, assetBaseURL) {
       ...contourLabelLayers(),
       ...labelLayers(),
       ...railwayLabelLayers(),
-      ...hillLabelLayers(),
-      ...settlementLabelLayers()
+      ...hillLabelLayers()
     ]
   };
 }

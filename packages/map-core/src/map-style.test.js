@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createExpression, featureFilter} from '@maplibre/maplibre-gl-style-spec';
+import {featureFilter} from '@maplibre/maplibre-gl-style-spec';
 import {mapStyle, basemapColors, drawingGroups, drawingGroupKey, roadLayerIds} from './index.js';
 
 const walkingLayerIds = ['paths', 'footways', 'park-routes', 'cycleways', 'steps'];
@@ -12,39 +12,21 @@ function walkingLayersFor(properties) {
   return filters.filter(({filter}) => filter.filter({zoom: 16}, feature)).map(({id}) => id);
 }
 
-function evaluateExpression(expression, properties, zoom = 16) {
-  const compiled = createExpression(expression);
-  assert.equal(compiled.result, 'success', JSON.stringify(compiled.value?.errors ?? []));
-  return compiled.value.evaluate({zoom}, {properties});
-}
-
-// Version 5 stores the walker's class on each path; no green-area test decides the pattern.
-test('a stored pathClass selects one walking pattern', () => {
+// Version 5 stores the walker's class on each path, including tracks. Today's `main` and unclassified fixtures stay
+// in this regression test, so reverting the stored-class rule makes the whole test fail.
+test('walking patterns come from stored pathClass with legacy fixtures', () => {
   const cases = [
     [{kind: 'footway', pathClass: 'park'}, 'park-routes'],
     [{kind: 'cycleway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'track', pathClass: 'park'}, 'park-routes'],
     [{kind: 'footway', pathClass: 'city'}, 'footways'],
     [{kind: 'path', pathClass: 'city'}, 'footways'],
+    [{kind: 'track', pathClass: 'city'}, 'footways'],
     [{kind: 'footway', pathClass: 'trail'}, 'paths'],
     [{kind: 'track', pathClass: 'trail'}, 'paths'],
     [{kind: 'cycleway', pathClass: 'city'}, 'cycleways'],
     [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
-    [{kind: 'steps', pathClass: 'trail'}, 'steps']
-  ];
-  for (const [properties, expectedLayer] of cases) {
-    assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
-  }
-  assert.deepEqual(
-    walkingLayersFor({kind: 'pedestrian', pathClass: 'city'}),
-    [],
-    'a pedestrian street stays a street'
-  );
-});
-
-// Every walking way gets exactly one walking pattern: two would draw dots over steps or over a park route.
-// Today's tiles carry `main` plus `inGreenArea`, or no class at all; those values keep their existing look.
-test("today's walking path properties keep their existing pattern", () => {
-  const cases = [
+    [{kind: 'steps', pathClass: 'trail'}, 'steps'],
     [{kind: 'footway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'cycleway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'footway', pathClass: 'main'}, 'footways'],
@@ -60,6 +42,11 @@ test("today's walking path properties keep their existing pattern", () => {
   for (const [properties, expectedLayer] of cases) {
     assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
   }
+  assert.deepEqual(
+    walkingLayersFor({kind: 'pedestrian', pathClass: 'city'}),
+    [],
+    'a pedestrian street stays a street'
+  );
 });
 
 for (const prefix of ['/', '/cg-map/']) {
@@ -132,107 +119,6 @@ test('coastline lines are not styled as waterways', () => {
     ['==', ['geometry-type'], 'LineString'],
     ['!=', ['get', 'kind'], 'coastline']
   ]);
-});
-
-test('contour index comes from elevation in the contours tile layer', () => {
-  const style = mapStyle('pmtiles://archive', 'https://local.test/');
-  const contourLines = style.layers.filter(
-    layer => layer.source === 'basemap' && layer['source-layer'] === 'contours' && layer.type === 'line'
-  );
-  assert.deepEqual(contourLines.map(layer => layer.id), ['contour-lines']);
-  for (const id of ['relief-contour-lines', 'index-contour-lines', 'relief-contour-labels'])
-    assert.equal(style.layers.find(layer => layer.id === id), undefined, `${id} must not invent a tile layer`);
-  const line = contourLines[0];
-  assert.equal(line.filter, undefined);
-  assert.equal(line.metadata[drawingGroupKey], 'contour-lines');
-  assert.equal(line.paint['line-color'], basemapColors.contour);
-  for (const [elevation, isIndex] of [[0, true], [100, true], [200, true], ['300', true], [99, false], [120, false]]) {
-    assert.equal(
-      evaluateExpression(line.paint['line-width'], {elevation}),
-      isIndex ? 1.4 : 0.7,
-      `${elevation} m width`
-    );
-    assert.equal(
-      evaluateExpression(line.paint['line-opacity'], {elevation}),
-      isIndex ? 0.45 : 0.28,
-      `${elevation} m opacity`
-    );
-  }
-  assert.equal(
-    evaluateExpression(line.paint['line-width'], {elevation: 150, index: true}),
-    0.7,
-    'a stored index flag cannot promote a line'
-  );
-  assert.equal(
-    evaluateExpression(line.paint['line-width'], {elevation: 100, index: false}),
-    1.4,
-    'a stored index flag cannot demote a line'
-  );
-  assert.ok(!JSON.stringify(line.paint).includes('"index"'), 'the stored index flag is gone');
-});
-
-test('settlement label size comes from place, population, or the old rank', () => {
-  const style = mapStyle('pmtiles://archive', 'https://local.test/');
-  const labels = style.layers.find(layer => layer.id === 'settlement-labels');
-  assert.ok(labels, 'settlement-labels is missing');
-  assert.equal(labels['source-layer'], 'settlements');
-  assert.equal(labels.metadata[drawingGroupKey], 'labels');
-  assert.equal(labels.maxzoom, 13);
-  assert.equal(labels.paint['text-color'], basemapColors.settlementLabel);
-  const sizeOf = properties => evaluateExpression(labels.layout['text-size'], properties);
-  const cases = [
-    [{place: 'city'}, 13],
-    [{place: 'town'}, 11],
-    [{place: 'village'}, 9],
-    [{place: 'hamlet'}, 8],
-    [{place: 'hamlet', population: 250}, 9],
-    [{place: 'town', population: '12000'}, 13],
-    [{place: 'village', population: 3000}, 11],
-    [{rank: 'capital'}, 13],
-    [{rank: 'city'}, 13],
-    [{rank: 'town'}, 11],
-    [{rank: 'village'}, 9],
-    [{rank: 'hamlet'}, 8],
-    [{rank: 'village', population: 3000}, 9],
-    [{place: 'village', rank: 'capital', population: 0}, 9]
-  ];
-  for (const [properties, expectedSize] of cases) {
-    assert.equal(sizeOf(properties), expectedSize, JSON.stringify(properties));
-  }
-  const matches = featureFilter(labels.filter).filter;
-  assert.equal(
-    matches({zoom: 8}, {type: 1, properties: {name: 'Podgorica', rank: 'capital'}}),
-    true,
-    "today's rank-only settlement keeps its label"
-  );
-  assert.equal(matches({zoom: 8}, {type: 1, properties: {name: 'Podgorica', place: 'city'}}), true);
-  assert.equal(matches({zoom: 8}, {type: 1, properties: {name: 'Podgorica'}}), false);
-});
-
-test("today's contours and settlements stay on their published tile layers", () => {
-  const style = mapStyle('pmtiles://archive', 'https://local.test/');
-  const contour = style.layers.find(layer => layer.id === 'contour-lines');
-  assert.equal(contour['source-layer'], 'contours');
-  assert.equal(contour.filter, undefined);
-  assert.equal(
-    evaluateExpression(contour.paint['line-width'], {elevation: 100}),
-    1.4,
-    "today's 100 m contours become index lines"
-  );
-  const settlement = style.layers.find(layer => layer.id === 'settlement-labels');
-  assert.equal(settlement['source-layer'], 'settlements');
-  assert.equal(settlement.maxzoom, 13);
-  assert.deepEqual(settlement.paint, {
-    'text-color': basemapColors.settlementLabel,
-    'text-halo-color': basemapColors.settlementLabelHalo,
-    'text-halo-width': 2
-  });
-  const matches = featureFilter(settlement.filter).filter;
-  const today = {type: 1, properties: {name: 'Podgorica', rank: 'capital'}};
-  const version5 = {type: 1, properties: {name: 'Podgorica', place: 'city', population: 150799}};
-  assert.equal(matches({zoom: 8}, today), true, "today's rank-only settlement keeps its label");
-  assert.equal(matches({zoom: 8}, version5), true);
-  assert.equal(evaluateExpression(settlement.layout['text-size'], today.properties), 13);
 });
 
 // The water fill's polygon filter already includes every water kind, so a stored sea polygon needs no style change.

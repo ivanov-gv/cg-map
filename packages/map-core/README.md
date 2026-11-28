@@ -53,33 +53,28 @@ tile layer (`kind: shade`) with the shaded tone, over green areas and below road
 while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged until data switches.
 `createMap` adds the summit triangle when the style first asks for it, since the style has no sprite.
 
-Contours stay in the `contours` tile layer; data will not rename that build output when source files merge. One line
-layer derives the index band from each feature's own `elevation`: lines divisible by 100 m are bold and more opaque, the
-rest thin and faint, with no read of the stored `index` flag. Today's contours already carry `elevation`, so their index
-lines gain that emphasis now; no second tile layer is needed. Their heights are labels along each line, kept un-flipped:
-the relief contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the
-labels along each line; the wiki's single column down a hill's sunlit slope is not reproduced.
+Contour lines stay one faint type every 20 m in data's `contours` tile layer. map-core reads no stored `index` flag:
+that flag belongs to data's tile build, where it decides which lines survive low zoom. Their heights are labels along
+each line, kept un-flipped: the relief contract runs every contour with higher ground on its left, so the digits face
+uphill. MapLibre spaces the labels along each line; the wiki's single column down a hill's sunlit slope is not
+reproduced.
 
-Settlement labels use the one `settlements` tile layer. A feature with `place` takes its text size from `place` and
-`population`: city 13 px, town 11 px, village 9 px, smaller places 8 px, with a higher population promoting a place to
-the next band. A feature without `place` but with the published `rank` keeps today's bands (capital or city 13 px, town
-11 px, village 9 px, others 8 px) until the data step publishes `place` everywhere and drops `rank`; population never
-overrides that rank-based case. Features with neither are ignored. The rules are in
-[src/settlement-layers.js](src/settlement-layers.js).
+Settlement names stay with the applications: Web draws its city names today. map-core has no settlement label layer;
+drawing them there is Feature #534, outside this task.
 
 Walking paths are drawn by what they are to a walker: stored `pathClass: park` as a cream path over a casing,
-`pathClass: trail` and `pathClass: city` as quiet round dots, and stairways with a step pattern. Today's tiles store
-`main` instead of `park`/`city`, so a main path still uses `inGreenArea` to pick its pattern, and a path with no class
-still uses the trail pattern; those are the only legacy fallbacks. Meadows fill only land areas with the `destination`
-flag. The park routes are new layers, `park-route-casing` and `park-routes`: an application that hit-tests walking paths
-by layer id adds them when it upgrades.
+`pathClass: trail` and `pathClass: city` as quiet round dots, and stairways with a step pattern. The stored classes also
+apply to tracks. Today's tiles store `main` instead of `park`/`city`, so a main path still uses `inGreenArea` to pick
+its pattern, and a path with no class still uses the trail pattern; those are the only legacy fallbacks. Meadows fill
+only land areas with the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an
+application that hit-tests walking paths by layer id adds them when it upgrades.
 
-POI symbols come from the feature's own `kind`, with the kind-to-category table in
-[src/place-category.js](src/place-category.js). The three kinds that occur in two categories today (`fuel`, `hotel`,
-`yes`) keep reading a stored `category` when one is present, so their current symbols stay; the rest ignore that legacy
-field. Marker identity, co-location groups, tap hits and `activeIds` use `entityId`; apps/web and apps/core-demo still
-pin data 0.1.0, whose places have no `entityId`, so a POI without one uses its legacy `id`. apps/editor pins 0.2.0,
-which already publishes `entityId`.
+POI symbols always follow the feature's own `kind`, with the kind-to-category table in
+[src/place-category.js](src/place-category.js). A stored `category` is ignored even for `fuel`, `hotel` and `yes`, the
+three kinds that occur in two categories today (owner decision on #517, 2026-11-28); the five POIs with conflicting
+values therefore change icon. Marker identity, co-location groups, tap hits and `activeIds` use `entityId`; apps/web and
+apps/core-demo still pin data 0.1.0, whose places have no `entityId`, so a POI without one uses its legacy `id`.
+apps/editor pins 0.2.0, which already publishes `entityId`.
 
 ## Lifecycle
 
