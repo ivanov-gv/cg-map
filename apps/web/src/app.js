@@ -1,15 +1,15 @@
-import {createElement, elementById, isReducedMotionPreferred} from './dom.js';
-import {renderPlaceResults} from './place-details.js';
-import {PlaceSelection} from './place-selection.js';
+import {createElement, elementById, isReducedMotionPreferred} from './shared/dom.js';
+import {renderPlaceResults} from './selection/place-details.js';
+import {PlaceSelection} from './selection/place-selection.js';
 import {
   installCityNames,
   installPublicPlaceLayers,
   searchResultMarkerData,
   SearchHighlights
-} from './public-map-layers.js';
-import {selectTappedFeature} from './map-selection.js';
-import {OfflineControls, renderConnectionBadge} from './offline-controls.js';
-import {transportStatusText} from './status-messages.js';
+} from './map/public-map-layers.js';
+import {selectTappedFeature} from './selection/map-selection.js';
+import {OfflineControls, renderConnectionBadge} from './offline/offline-controls.js';
+import {transportStatusText} from './shared/status-messages.js';
 import {
   categories,
   collectSearchResults,
@@ -20,7 +20,7 @@ import {
   featureCollection,
   DEFAULT_CENTER,
   DISCOVER_ZOOM
-} from './core.js';
+} from './shared/core.js';
 import {
   createMap,
   registerArchiveProtocol,
@@ -33,8 +33,8 @@ import {
   buildPlaceMarkers,
   placeLayers
 } from '@ivanov-gv/map-core';
-import {ArchiveSource} from './offline.js';
-import {installTransport, TransportFeed} from './transport.js';
+import {ArchiveSource} from './offline/offline.js';
+import {installTransport, TransportFeed} from './transport/transport.js';
 import {
   buildingAddress,
   buildingAddressIndex,
@@ -46,17 +46,17 @@ import {
   endpointFeatures,
   installRoutePoints,
   placesInsideFootprint
-} from './point-selection.js';
-import {RoutePlanner} from './route-planner.js';
-import {ObjectSelection} from './object-selection.js';
-import {registerAppUpdates} from './app-updates.js';
-import {resolveDataMode, dataEndpoints, basemapURL} from './data-mode.js';
-import {installMapTaps} from './map-taps.js';
-import {installPositionLayers} from './position.js';
-import {LocationControls} from './location-controls.js';
-import {MapInterface, hasActiveSearchFilter} from './interface.js';
-import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
-import {renderMapAttribution} from './attribution.js';
+} from './selection/point-selection.js';
+import {RoutePlanner} from './routing/route-planner.js';
+import {ObjectSelection} from './selection/object-selection.js';
+import {registerAppUpdates} from './offline/app-updates.js';
+import {resolveDataMode, dataEndpoints, basemapURL} from './transport/data-mode.js';
+import {installMapTaps} from './map/map-taps.js';
+import {installPositionLayers} from './location/position.js';
+import {LocationControls} from './location/location-controls.js';
+import {MapInterface, hasActiveSearchFilter} from './interface/interface.js';
+import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './shared/device-class.js';
+import {renderMapAttribution} from './map/attribution.js';
 
 // Re-renders the footer when sources or the viewport change; the renderer shortens the version when needed.
 function renderCurrentAttribution() {

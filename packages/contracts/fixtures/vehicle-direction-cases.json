@@ -1,5 +1,5 @@
 {
-  "description": "Movement-direction cases defining how the optional vehicles.schema.json bearing is derived from movement; shared by services/backend/internal/service/vehicles/direction_test.go and apps/web/tests/vehicle-direction.test.mjs, so the Go and browser trackers stay identical. Each check is [milliseconds since start, [[route, longitude, latitude], ...]]; want is the bearing per vehicle after the last check, null without one. 0.001 degrees of latitude is about 111 m; of longitude about 82 m at Podgorica.",
+  "description": "Movement-direction cases defining how the optional vehicles.schema.json bearing is derived from movement; shared by services/backend/internal/service/vehicles/direction_test.go and apps/web/src/transport/vehicle-direction.test.js, so the Go and browser trackers stay identical. Each check is [milliseconds since start, [[route, longitude, latitude], ...]]; want is the bearing per vehicle after the last check, null without one. 0.001 degrees of latitude is about 111 m; of longitude about 82 m at Podgorica.",
   "cases": [
     {"name": "first sighting has no direction", "checks": [[0, [["6", 19.26, 42.44]]]], "want": [null]},
     {"name": "movement east", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.261, 42.44]]]], "want": [90]},

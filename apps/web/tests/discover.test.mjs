@@ -8,8 +8,8 @@ import {
   accuracyCircle,
   distanceKilometres,
   formatPositionAge
-} from '../src/core.js';
-import {PositionTracker, positionFeatures} from '../src/position.js';
+} from '../src/shared/core.js';
+import {PositionTracker, positionFeatures} from '../src/location/position.js';
 
 const bounds = [
   [17.8, 41.3],

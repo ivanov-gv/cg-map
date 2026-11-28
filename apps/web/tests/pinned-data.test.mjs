@@ -30,9 +30,18 @@ test('web tests read sources and fixtures from the pinned package', () => {
 function webTestFiles() {
   // This file holds the rule's text, so it cannot also be subject to it.
   const guardFile = 'pinned-data.test.mjs';
-  const files = fileSystem.readdirSync(new URL('tests/', applicationRoot), {recursive: true})
+  const files = fileSystem
+    .readdirSync(new URL('tests/', applicationRoot), {recursive: true})
     .filter(file => file !== guardFile && /\.(?:mjs|js|json)$/.test(file))
-    .map(file => [file, new URL(`tests/${file}`, applicationRoot)]);
+    .map(file => [`tests/${file}`, new URL(`tests/${file}`, applicationRoot)]);
+  for (const directory of ['src', 'tools']) {
+    const directoryUrl = new URL(`${directory}/`, applicationRoot);
+    if (!fileSystem.existsSync(directoryUrl)) continue;
+    for (const file of fileSystem.readdirSync(directoryUrl, {recursive: true})) {
+      if (!/\.(?:test|browser\.test)\.(?:mjs|js)$/.test(file)) continue;
+      files.push([`${directory}/${file}`, new URL(`${directory}/${file}`, applicationRoot)]);
+    }
+  }
   files.push(['playwright.config.mjs', new URL('playwright.config.mjs', applicationRoot)]);
   return files;
 }

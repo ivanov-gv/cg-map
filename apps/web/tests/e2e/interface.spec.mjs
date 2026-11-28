@@ -1,7 +1,7 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
 import {entranceBearing, readPinnedSource} from '../pinned-data.mjs';
-import {buildingAddress, placesInsideFootprint} from '../../src/point-selection.js';
+import {buildingAddress, placesInsideFootprint} from '../../src/selection/point-selection.js';
 import {
   atViewport,
   camera,

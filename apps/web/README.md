@@ -26,18 +26,18 @@ result lists free; avoid expensive application work during gestures.
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [index.html](public/index.html)                                                 | Which controls exist and their IDs                                                     |
 | [style.css](public/style.css)                                                   | Layout, positioning and visual states (device-specific @media rules)                   |
-| [device-class.js](src/device-class.js)                                          | Device classes (Flip/Mobile/Desktop): media query strings and runtime detection        |
-| [core.js](src/core.js)                                                          | Small data functions: search, distances, categories, Discover scale and location rules |
+| [device-class.js](src/shared/device-class.js)                                   | Device classes (Flip/Mobile/Desktop): media query strings and runtime detection        |
+| [core.js](src/shared/core.js)                                                   | Small data functions: search, distances, categories, Discover scale and location rules |
 | [app.js](src/app.js)                                                            | Startup, directory data, controller wiring and public map events                       |
-| [data-mode.js](src/data-mode.js)                                                | Server or mock data: which basemap and vehicle URLs to use                             |
-| [vehicle-direction.js](src/vehicle-direction.js)                                | Direction of travel for vehicle markers (movement, or route estimate)                  |
+| [data-mode.js](src/transport/data-mode.js)                                      | Server or mock data: which basemap and vehicle URLs to use                             |
+| [vehicle-direction.js](src/transport/vehicle-direction.js)                      | Direction of travel for vehicle markers (movement, or route estimate)                  |
 | [config.json](public/config.json)                                               | Static hosts' data mode (`mock`); the Go server answers `server` instead               |
 | [map-core/map-style.js](../../packages/map-core/src/map-style.js)               | Vector basemap sources, layers, colors and labels                                      |
 | [map-core/satellite.js](../../packages/map-core/src/satellite.js)               | The bounded raster sample and its visibility switch                                    |
 | [map-core/poi-icons.js](../../packages/map-core/src/poi-icons.js)               | Runtime-drawn place category icons for the map and its key                             |
 | [map-core/place-visibility.js](../../packages/map-core/src/place-visibility.js) | Pure level policy: markers, zoom bands, layer specs, tap hits                          |
-| [position.js](src/position.js)                                                  | Device location states, accuracy ring and position layers                              |
-| [offline.js](src/offline.js)                                                    | Archive transport, verified downloads and local file reads                             |
+| [position.js](src/location/position.js)                                         | Device location states, accuracy ring and position layers                              |
+| [offline.js](src/offline/offline.js)                                            | Archive transport, verified downloads and local file reads                             |
 | [sw.js](src/sw.js)                                                              | Offline file requests, shell caches and worker lifecycle                               |
 | [offline-manifest.js](tools/finalize.mjs)                                       | Generated list of files for the service worker                                         |
 | [data/manifest.json](tools/finalize.mjs)                                        | Generated archive URL, size, hash and offline inventory                                |
@@ -50,9 +50,9 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 
 The [interface feature](../../docs/ui-ux/features/interface.md) defines the implemented composition. The map fills the
 viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens, and the
-× keeps its slot in every search-bar state so the input never changes width. [interface.js](src/interface.js) owns
-closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states and
-swipes, focus restoration, visible-viewport geometry, and live device-class mapping. It has no dependency on data
+× keeps its slot in every search-bar state so the input never changes width. [interface.js](src/interface/interface.js)
+owns closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states
+and swipes, focus restoration, visible-viewport geometry, and live device-class mapping. It has no dependency on data
 producers or backend code.
 
 When a foldable phone crosses the Flip breakpoint, `interface.js` maps the current view and card state into the new
@@ -256,27 +256,27 @@ The top-level start().catch(...) handler displays startup errors. Later map erro
 app.js coordinates map, directory and startup state plus route endpoints. Three workflow controllers keep their
 transient state with the behavior that changes it:
 
-| Owner                                        | State and responsibility                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `mapState`                                   | The single MapLibre map, its interface/controllers, readiness, optional layers and camera-exploration policy |
-| `directoryState`                             | Loaded places, visibility rules, stable marker keys, building addresses and the active search                |
-| `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
-| `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
-| [PlaceSelection](src/place-selection.js)     | The selected listing or point, leading preview, deferred camera framing and return-focus target              |
-| [LocationControls](src/location-controls.js) | The in-memory fix, its distance origin, location following, explicit requests and first-fix recentering      |
-| [core.js](src/core.js)                       | Pure utilities: search, distance, scale, and position helpers                                                |
-| [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
+| Owner                                                 | State and responsibility                                                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `mapState`                                            | The single MapLibre map, its interface/controllers, readiness, optional layers and camera-exploration policy |
+| `directoryState`                                      | Loaded places, visibility rules, stable marker keys, building addresses and the active search                |
+| `startupState`                                        | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
+| `routeEndpoints`                                      | In-memory From/To points passed to the route planner                                                         |
+| [PlaceSelection](src/selection/place-selection.js)    | The selected listing or point, leading preview, deferred camera framing and return-focus target              |
+| [LocationControls](src/location/location-controls.js) | The in-memory fix, its distance origin, location following, explicit requests and first-fix recentering      |
+| [core.js](src/shared/core.js)                         | Pure utilities: search, distance, scale, and position helpers                                                |
+| [OfflineControls](src/offline/offline-controls.js)    | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
 Controllers read the map and directory through getters because those inputs finish loading independently after the
 controls are bound. Selection and location keep their transient state private; app.js wires their effects together.
 
-[place-details.js](src/place-details.js) renders details and result rows without owning the selection. It preserves the
-focused row when a camera move rebuilds the list and patches a late building-address row without rebuilding the card.
-[map-selection.js](src/map-selection.js) chooses the most specific hit and calls the matching selection action, opening
-the first identity of the topmost rendered listing marker directly. [public-map-layers.js](src/public-map-layers.js)
-installs app-owned overlays; shared rendering remains in map-core. [status-messages.js](src/status-messages.js) keeps
-transport/location wording pure. Map gestures are MapLibre's own, unchanged
-([ADR 0015](../../docs/decisions/0015-maplibre-gestures-unchanged.md)).
+[place-details.js](src/selection/place-details.js) renders details and result rows without owning the selection. It
+preserves the focused row when a camera move rebuilds the list and patches a late building-address row without
+rebuilding the card. [map-selection.js](src/selection/map-selection.js) chooses the most specific hit and calls the
+matching selection action, opening the first identity of the topmost rendered listing marker directly.
+[public-map-layers.js](src/map/public-map-layers.js) installs app-owned overlays; shared rendering remains in map-core.
+[status-messages.js](src/shared/status-messages.js) keeps transport/location wording pure. Map gestures are MapLibre's
+own, unchanged ([ADR 0015](../../docs/decisions/0015-maplibre-gestures-unchanged.md)).
 
 Nearest results from `selectNearestPlaces()` carry `feature` and `distanceKilometres`. Search normalization is
 `normalizeSearchText()`, its predicate is `matchesPlaceSearch()`, and GeoJSON construction is `featureCollection()`.
@@ -494,9 +494,9 @@ atomic rollback across every shell/cache/release component.
 
 ### Why old UI can survive a deployment
 
-The service worker serves cached assets first. [app-updates.js](src/app-updates.js) checks for a new worker once on page
-load or reload, without background polling or focus/connectivity checks. A replacement shell bypasses the browser HTTP
-cache and activates only after every required asset is cached.
+The service worker serves cached assets first. [app-updates.js](src/offline/app-updates.js) checks for a new worker once
+on page load or reload, without background polling or focus/connectivity checks. A replacement shell bypasses the
+browser HTTP cache and activates only after every required asset is cached.
 
 A successful update automatically reloads open app tabs at their existing URLs. The worker initiates navigation without
 awaiting it during activation, avoiding a lifecycle deadlock and also refreshing tabs running older app code. First
@@ -523,14 +523,14 @@ bubble. The category navigation stays outside the scrolling list and begins with
 row; clicking an active category or its × returns to All without clearing the query. When the row is off screen on
 Mobile, interface.js shows one active category chip under the header from the same directoryState value. On Flip it
 shows a top-row pair: the same category chip plus a query chip from the search field, governed by the pure
-`isQueryChipVisible` rule in [interface.js](src/interface.js). Both use the same `openChipTarget()` path, so tapping a
-label opens the control that owns its row. Both hide while a dock or bubble covers the map; Flip chips also hide while
-any Flip card is open, whereas the Mobile chip stays above a Peek or Full card and hides only in Fullscreen. The bubble
-extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide the phone
-dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes. On phones
-(not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up through a
-continuous top-edge drag to Full and Fullscreen; a map pick opens the card in Full. The selected feature stays in the
-visible map area and the burger/search header is never replaced or moved.
+`isQueryChipVisible` rule in [interface.js](src/interface/interface.js). Both use the same `openChipTarget()` path, so
+tapping a label opens the control that owns its row. Both hide while a dock or bubble covers the map; Flip chips also
+hide while any Flip card is open, whereas the Mobile chip stays above a Peek or Full card and hides only in Fullscreen.
+The bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and
+hide the phone dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard
+closes. On phones (not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping
+up through a continuous top-edge drag to Full and Fullscreen; a map pick opens the card in Full. The selected feature
+stays in the visible map area and the burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
@@ -538,7 +538,7 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 ### Device classes
 
 The app distinguishes three viewport categories. The single definition lives in
-[src/device-class.js](src/device-class.js) as exported media query strings; the CSS `@media` rules in
+[src/shared/device-class.js](src/shared/device-class.js) as exported media query strings; the CSS `@media` rules in
 [style.css](public/style.css) must use the same conditions. At startup and on each matching media-query or resize event,
 `app.js` and `interface.js` derive `body[data-device]`, the cached `interface.deviceClass`, the dock screen, card
 presentation and history steps from that one class. Runtime code reads the shared `deviceClass(matchMedia)` helper and
@@ -771,28 +771,30 @@ between the API and the local archive. config.json is not in the offline shell b
 
 ## Optional transport
 
-[transport.js](src/transport.js) installs static stop circles/names and live vehicle markers/route labels. Each marker
-is a teardrop pointing in the bus's direction of travel ([vehicle-direction.js](src/vehicle-direction.js)): solid once
-movement is known, outlined while estimated from the route, a plain disc when neither is available. Transport visibility
-controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js
-uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle
-responses are never cached there. See [transport behavior](../../docs/ui-ux/features/transport.md).
+[transport.js](src/transport/transport.js) installs static stop circles/names and live vehicle markers/route labels.
+Each marker is a teardrop pointing in the bus's direction of travel
+([vehicle-direction.js](src/transport/vehicle-direction.js)): solid once movement is known, outlined while estimated
+from the route, a plain disc when neither is available. Transport visibility controls both, while only vehicle positions
+are cleared during offline/hidden/error states. Stop selection in app.js uses text nodes in a MapLibre popup. The build
+copies the reviewed stop snapshot into the offline shell; live vehicle responses are never cached there. See
+[transport behavior](../../docs/ui-ux/features/transport.md).
 
 ## Point selection
 
-[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js
-presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js)
-highlights source polygons with a contour and translucent fill, or lines with a stroke. A picked place or stop keeps
-only its existing marker ring; a separate building pick owns the footprint highlight. Bare coordinates use a small
-circle. No extra pin is added. See [point selection](../../docs/ui-ux/features/point-selection.md) for hit priority,
-available metadata, and offline behavior.
+[point-selection.js](src/selection/point-selection.js) describes clicked features and installs the A/B endpoint layers.
+app.js presents the shared details card and stores From/To session state.
+[object-selection.js](src/selection/object-selection.js) highlights source polygons with a contour and translucent fill,
+or lines with a stroke. A picked place or stop keeps only its existing marker ring; a separate building pick owns the
+footprint highlight. Bare coordinates use a small circle. No extra pin is added. See
+[point selection](../../docs/ui-ux/features/point-selection.md) for hit priority, available metadata, and offline
+behavior.
 
 ## Routes
 
-[routing.js](src/routing.js) handles car/foot requests, [transit-routing.js](src/transit-routing.js) searches local bus
-patterns, and [route-planner.js](src/route-planner.js) owns mode controls, cancellation, line layers, and itinerary
-rendering. See [routing](../../docs/ui-ux/features/routing.md) before changing providers, transit assumptions, or
-offline behavior.
+[routing.js](src/routing/routing.js) handles car/foot requests, [transit-routing.js](src/routing/transit-routing.js)
+searches local bus patterns, and [route-planner.js](src/routing/route-planner.js) owns mode controls, cancellation, line
+layers, and itinerary rendering. See [routing](../../docs/ui-ux/features/routing.md) before changing providers, transit
+assumptions, or offline behavior.
 
 ## Building addresses
 

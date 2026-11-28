@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {matchesStreetName, normalizeSearchText} from '../../src/core.js';
+import {matchesStreetName, normalizeSearchText} from '../../src/shared/core.js';
 import {
   CAMERA_HOLD_MILLISECONDS,
   camera,

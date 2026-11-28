@@ -15,8 +15,8 @@ import {pinnedDataRoot} from './pinned-data.mjs';
 
 const appRoot = fileURLToPath(new URL('../', import.meta.url));
 
-// Returns an isolated project with main's flat modules, a nested runtime module, a local map-core sibling path, two
-// colocated tests, and a support helper.
+// Returns an isolated project with main's reviewed modules in their feature folders, a nested runtime module, a local
+// map-core sibling path, two colocated tests, and a support helper.
 export function createFixtureProject(testContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-web-fixture-'));
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
@@ -41,7 +41,9 @@ export function createFixtureProject(testContext) {
   fs.writeFileSync(path.join(source, 'sw.js'), "self.addEventListener('install', () => {});\n");
   for (const moduleName of mainRuntimeModules) {
     if (moduleName === 'app.js') continue;
-    fs.writeFileSync(path.join(source, moduleName), 'export {};\n');
+    const destination = path.join(source, moduleName);
+    fs.mkdirSync(path.dirname(destination), {recursive: true});
+    fs.writeFileSync(destination, 'export {};\n');
   }
   fs.writeFileSync(
     path.join(source, 'feature/nested.js'),
