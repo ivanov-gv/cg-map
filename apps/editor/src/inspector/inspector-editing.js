@@ -46,6 +46,7 @@ import {isSameHandle, moveVertex, roundedCoordinate, vertexHandles} from '../geo
 import {rightAngledCorner} from '../geometry/geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from '../layers/shared/layer-behaviors.js';
+import {placeLinkResultProblemForEdits} from '../layers/places/layer-places.js';
 import {featureCapabilities, featureProblem, operationProblem} from '../layers/shared/layer-rules.js';
 import {hasMagnetEffect} from '../map-tools/magnet-tools.js';
 import {hideModeBar, setCrossVisible, setModeNotice, showModeBar} from '../map-tools/mode-bar.js';
@@ -98,7 +99,8 @@ export class InspectorEditing {
   }
 
   get #behavior() {
-    return behaviorOf(this.#filename, this.#context.behaviorContext().layer?.id);
+    const context = this.#context.behaviorContext();
+    return behaviorOf(this.#filename, context.layer?.id, context.bundleVersion);
   }
 
   get #isVertexTool() {
@@ -184,7 +186,13 @@ export class InspectorEditing {
   #shapeProblem() {
     const {feature} = this.#transaction;
     const shapeRule = {...this.#rule, properties: {}, requiredAny: undefined};
-    return featureProblem({...feature, properties: {}}, shapeRule, this.#context.levels, this.#baseFeature);
+    return featureProblem(
+      {...feature, properties: {}},
+      shapeRule,
+      this.#context.levels,
+      this.#baseFeature,
+      this.#context.behaviorContext().bundleVersion
+    );
   }
 
   // What the layer would record beside the open edit as it is now, and why it would refuse it.
@@ -360,7 +368,7 @@ export class InspectorEditing {
     const {isNew, feature} = this.#transaction;
     const geometryType = feature.geometry?.type;
     const isShape = Boolean(geometryType) && geometryType !== 'Point';
-    const {canReshape, canDelete} = featureCapabilities(feature, this.#rule);
+    const {canReshape, canDelete} = featureCapabilities(feature, this.#rule, this.#context.behaviorContext().bundleVersion);
     const isReshapableHere = this.#behavior.isReshapable(this.#context.behaviorContext());
     const canEditShape = (isNew || canReshape) && Boolean(geometryType) && isReshapableHere;
     elementById('tool-move').hidden = !canEditShape;
@@ -369,7 +377,8 @@ export class InspectorEditing {
     elementById('delete-feature').hidden = isNew || !canDelete;
     const isPhone = this.#context.isPhone();
     elementById('delete-feature').textContent = isPhone ? 'Mark for deletion' : 'Delete';
-    const tools = this.#behavior.tools(feature, this.#editContext());
+    // A tool such as "Move icon point" is offered from what the form says now, not the feature as it was opened.
+    const tools = this.#behavior.tools(this.#currentFeature(), this.#editContext());
     const shownTools = tools.filter(({isDesktopOnly}) => !isDesktopOnly || !isPhone);
     elementById('extra-tools').replaceChildren(
       ...shownTools.map(({label, run}) => {
@@ -405,6 +414,7 @@ export class InspectorEditing {
       key: this.#transaction.key,
       filename: this.#filename,
       isNew: this.#transaction.isNew,
+      behavior: this.#behavior,
       context: this.#context.behaviorContext(),
       setProperties: whileOpen(properties => this.#setProperties(properties)),
       extras: this.#transaction.extras,
@@ -553,7 +563,13 @@ export class InspectorEditing {
     }
     const behaviorContext = this.#context.behaviorContext();
     const feature = this.#behavior.prepared(this.#currentFeature(), behaviorContext, this.#editContext());
-    const ruleProblem = featureProblem(feature, this.#rule, this.#context.levels, this.#baseFeature);
+    const ruleProblem = featureProblem(
+      feature,
+      this.#rule,
+      this.#context.levels,
+      this.#baseFeature,
+      behaviorContext.bundleVersion
+    );
     const edit = this.#change(feature);
     return {feature, problem: ruleProblem ?? this.#behavior.problem(edit, behaviorContext)};
   }
@@ -590,9 +606,21 @@ export class InspectorEditing {
       if (isUnchanged) continue;
       const operation = {filename, operation: before ? 'modify' : 'add', reference: {localId: key}, before, after};
       const problem = operationProblem(operation, rules, levels);
-      if (problem) return `${behaviorOf(filename).title(after, this.#context.behaviorContext())}: ${problem}.`;
+      if (problem) {
+        const context = this.#context.behaviorContext();
+        return `${behaviorOf(filename, context.layer?.id, context.bundleVersion).title(after, context)}: ${problem}.`;
+      }
     }
     return null;
+  }
+
+  // Why the files this step would leave cannot be recorded, even when each edit looks sound on its own.
+  #resultProblemOf(edits) {
+    const context = this.#context.behaviorContext();
+    return (
+      this.#behavior.resultProblem(edits, context) ??
+      placeLinkResultProblemForEdits(this.#context.session, context, edits)
+    );
   }
 
   // Records the edit together with others of the same step.
@@ -608,6 +636,8 @@ export class InspectorEditing {
     const edits = [...ownEdits, ...companions, ...extraEdits];
     const invalidEdit = this.#problemOf(edits);
     if (invalidEdit) return this.#refuse(invalidEdit);
+    const resultProblem = this.#resultProblemOf(edits);
+    if (resultProblem) return this.#refuse(resultProblem);
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
@@ -631,6 +661,11 @@ export class InspectorEditing {
     const invalidEdit = this.#problemOf(edits);
     if (invalidEdit) {
       this.#refuse(invalidEdit);
+      return;
+    }
+    const resultProblem = this.#resultProblemOf(edits);
+    if (resultProblem) {
+      this.#refuse(resultProblem);
       return;
     }
     this.#context.commands.recordEdits(edits);
@@ -673,7 +708,14 @@ export class InspectorEditing {
     const ownEdit = {filename: entry.filename, key: entry.key, after: null};
     confirmDeletion({title: `Delete ${title}?`, message, options}, async option => {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);
-      if (optionEdits) this.#recordDeletion([ownEdit, ...edits, ...optionEdits], title);
+      if (!optionEdits) return;
+      const allEdits = [ownEdit, ...edits, ...optionEdits];
+      const resultProblem = this.#resultProblemOf(allEdits);
+      if (resultProblem) {
+        this.#refuse(resultProblem);
+        return;
+      }
+      this.#recordDeletion(allEdits, title);
     });
   }
 

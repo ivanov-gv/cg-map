@@ -79,6 +79,10 @@ fileSystem.copyFileSync(
   path.join(contractsRoot, 'editor-layers.json'),
   path.join(outputDirectory, 'data/editor-layers.json')
 );
+fileSystem.copyFileSync(
+  path.join(dataRoot, 'sources/place-visibility-policy.json'),
+  path.join(outputDirectory, 'data/place-visibility-policy.json')
+);
 // Last, because the manifest hashes every other file in the artifact.
 const {release} = readVerifiedRelease(dataRoot);
 const offlineRelease = writeOfflineManifest(outputDirectory, `data/${release.archive.file}`);

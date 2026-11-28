@@ -59,7 +59,22 @@ test('manifest accepts every bundle version and requires one entry per supported
   assert.deepEqual(addedInVersion4, ['bridges.geojson', 'railways.geojson']);
   assert.deepEqual(leftOutInVersion4, ['slopes.geojson']);
   assert.equal(bundleFilesByVersion[4].length, 23);
-  for (const version of [1, 2, 3, 4]) {
+  assert.deepEqual(bundleFilesByVersion[5], [
+    'bridges.geojson',
+    'buildings.geojson',
+    'canyon-rims.geojson',
+    'places.geojson',
+    'railways.geojson',
+    'relief.geojson',
+    'roads.geojson',
+    'settlements.geojson',
+    'surface.geojson',
+    'transit-network.json',
+    'transit-routes.json',
+    'transport-stops.geojson'
+  ]);
+  assert.equal(currentBundleVersion, 3, 'the producer still emits version 3');
+  for (const version of [1, 2, 3, 4, 5]) {
     assert.equal(
       validateBundleManifest(manifest(version)).layers.length,
       bundleFilesByVersion[version].length
@@ -130,6 +145,29 @@ test('bundle consumer reports manifest and source HTTP failures', async () => {
     ),
     /HTTP 404/
   );
+});
+
+test('a version 3 bundle keeps its reviewed file set and manifest version', async () => {
+  const bundle = await loadSourceBundle('https://local.test/v3/', async url => {
+    if (url.pathname.endsWith('manifest.json')) return Response.json(manifest(3));
+    return new Response(bytes);
+  });
+  assert.deepEqual([...bundle.keys()], bundleFilesByVersion[3]);
+  assert.equal(bundle.manifest.version, 3);
+  assert.ok(bundle.has('water.geojson'));
+  assert.equal(bundle.has('surface.geojson'), false);
+});
+
+test('a version 5 bundle loads the whole surface and its verified manifest', async () => {
+  const bundle = await loadSourceBundle('https://local.test/v5/', async url => {
+    if (url.pathname.endsWith('manifest.json')) return Response.json(manifest(5));
+    return new Response(bytes);
+  });
+  assert.deepEqual([...bundle.keys()], bundleFilesByVersion[5]);
+  assert.equal(bundle.manifest.version, 5);
+  assert.ok(bundle.has('surface.geojson'));
+  assert.ok(bundle.has('transit-network.json'));
+  assert.equal(bundle.has('water.geojson'), false);
 });
 
 test('a version 4 bundle loads its bridges and railways without the derived slopes', async () => {

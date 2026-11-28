@@ -1,12 +1,18 @@
 // A city of a few objects per layer, small enough to read, with everything the current bundle version holds. A caller
-// can also ask for version 4, which has bridge outlines and railways instead of derived slopes. Layers the pinned
-// reviewed bundle does not emit yet are tested on it. The rules beside it are this app's own copy for tests: they match
-// the pinned contracts for new files, while ridges stay view-only here until #490.
+// can also ask for version 4, which has bridge outlines and railways instead of derived slopes, or for version 5, which
+// stores the surface in one file. Layers the pinned reviewed bundle does not emit yet are tested on it. The rules beside
+// it are this app's own copy for tests: they match the pinned contracts for new files, while ridges stay view-only here
+// until #490.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {bundleFilesByVersion, currentBundleVersion} from '../../src/source-data/source-bundle.js';
+import {pinnedContractsRoot} from '../pinned-contracts.mjs';
 
-const rules = JSON.parse(readFileSync(new URL('../fixtures/editor-layers.json', import.meta.url)));
+const releasedRules = JSON.parse(readFileSync(new URL('../fixtures/editor-layers.json', import.meta.url)));
+const pinnedRules = JSON.parse(readFileSync(path.join(pinnedContractsRoot, 'editor-layers.json'), 'utf8'));
+// The fixture keeps the released rules for versions 1-4 and takes version 5 from the exact published contract.
+const rules = {...releasedRules, bundleRules: pinnedRules.bundleRules};
 export const cityCentre = [19.26, 42.44];
 // About 11 m north and 8 m east: close enough that a whole block fits the smallest test window at zoom 18.
 const step = 0.0001;
@@ -274,6 +280,134 @@ function cityFeatures() {
   };
 }
 
+// Version 5 keeps the same city but stores every surface kind in one file, with only the fields the new rules list.
+// The two municipalities share the edge through the centre; moving one corner must move them both as one edit.
+function version5Features() {
+  const released = cityFeatures();
+  const westMunicipality = [[0, -600], [0, 0], [0, 600], [-600, 600], [-600, -600]];
+  const eastMunicipality = [[0, -600], [600, -600], [600, 600], [0, 600], [0, 0]];
+  return {
+    'surface.geojson': [
+      feature('way/50', {kind: 'park', name: 'Town park', labelPoint: at(4, -3)}, polygon(square(2, -5, 4))),
+      feature(
+        'derived:shade-1',
+        {kind: 'shade', greenAreaEntityId: 'way/50'},
+        {type: 'MultiPolygon', coordinates: [[ring(square(3, -4, 2))]]}
+      ),
+      feature('way/60', {kind: 'lake', name: 'Town lake'}, polygon(square(-9, 2, 3))),
+      feature('way/61', {kind: 'river', name: 'Creek'}, line([-9, 8], [-7.5, 5])),
+      feature(
+        'way/51',
+        {
+          kind: 'protected-area',
+          name: 'Old forest',
+          osmTag: 'leisure=nature_reserve',
+          labelLine: [at(8, -5), at(9, -5)]
+        },
+        polygon(square(8, -5, 2))
+      ),
+      feature(
+        'relation/90',
+        {
+          kind: 'municipality',
+          'ISO3166-2': 'ME-01',
+          name: 'West',
+          labelPoint: at(-300, 0)
+        },
+        polygon(westMunicipality)
+      ),
+      feature(
+        'relation/91',
+        {
+          kind: 'municipality',
+          'ISO3166-2': 'ME-02',
+          name: 'East',
+          labelPoint: at(300, 0)
+        },
+        polygon(eastMunicipality)
+      ),
+      feature('ne:NBR', {kind: 'context', name: 'Neighbour'}, polygon(square(600, -600, 1200))),
+      feature('derived:sea', {kind: 'sea'}, {
+        type: 'Polygon',
+        coordinates: [ring([[-900, -900], [-600, -900], [-600, -600], [-600, 600], [-900, 600]])]
+      })
+    ],
+    'roads.geojson': [
+      ...released['roads.geojson'],
+      feature('way/900', {kind: 'street', name: 'Main street'}, null),
+      feature('node/40', {kind: 'junction', junctionKind: 'crossing'}, point(0, 0))
+    ],
+    'bridges.geojson': released['bridges.geojson'],
+    'railways.geojson': released['railways.geojson'],
+    'buildings.geojson': [
+      ...released['buildings.geojson'].map(item =>
+        item.properties.entityId === 'way/1'
+          ? {
+              ...item,
+              properties: {
+                ...item.properties,
+                'addr:streetEntityId': 'way/900',
+                'addr:housenumber': '14',
+                'building:levels': '5'
+              }
+            }
+          : item
+      ).map(item => {
+        if (item.properties.entityId !== 'way/1') return item;
+        const properties = {...item.properties};
+        delete properties['addr:street'];
+        return {...item, properties};
+      }),
+      feature('node/10', {kind: 'entrance', entrance: 'main', buildingEntityId: 'way/1'}, point(-2, 1))
+    ],
+    'building-labels.geojson': [
+      ...released['building-labels.geojson'].map(item => {
+        if (item.properties.osm_id !== 'way/1') return item;
+        const properties = {...item.properties, 'addr:streetEntityId': 'way/900'};
+        delete properties['addr:street'];
+        return {...item, properties};
+      })
+    ],
+    'places.geojson': [
+      feature(
+        'node/20',
+        {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe', 'addr:streetEntityId': 'way/900'},
+        point(-1, 1)
+      )
+    ],
+    'settlements.geojson': [
+      feature('node/80', {kind: 'settlement', name: 'Town', place: 'town', source: 'OpenStreetMap'}, point(-3, 8)),
+      feature(
+        'way/81',
+        {kind: 'settlement-area', name: 'Town', settlementEntityId: 'node/80'},
+        polygon(square(-5, 6, 4))
+      )
+    ],
+    'relief.geojson': [
+      ...released['contours.geojson'],
+      feature(
+        'node/70',
+        {kind: 'summit', natural: 'peak', name: 'Town hill', ele: 92},
+        point(15, 5)
+      )
+    ],
+    'canyon-rims.geojson': [
+      feature(
+        'derived:rim-1',
+        {bank: 'left', height: 5, width: 2, riverEntityId: 'way/61'},
+        line([-9, 9], [-7, 9])
+      )
+    ],
+    'transport-stops.geojson': [
+      stop('1', 'West stop', [], point(-5, 0.2)),
+      stop('2', 'Middle stop', [], point(0, 0.2)),
+      stop('3', 'East stop', [], point(5, 0.2))
+    ].map(({id, properties, geometry}) => feature(`epodgorica:${id}`, {name: properties.name, stopId: id}, geometry)),
+    'transit-network.json': [],
+    'transit-routes.json': []
+  };
+}
+
 const transitRoutes = {
   retrievedAt: '2026-10-18T19:54:19Z',
   source: 'fixture',
@@ -292,20 +426,37 @@ const transitRoutes = {
   ]
 };
 const turnRestrictions = {entitySchemaVersion: 1, restrictions: []};
+// The released representative network is one read-only document, not a feature per stop or pattern.
+const transitNetwork = {
+  version: 1,
+  retrievedAt: '2026-10-18T19:54:19Z',
+  source: 'fixture',
+  stops: {
+    1: {name: 'West stop', coordinates: at(-5, 0.2)},
+    2: {name: 'Middle stop', coordinates: at(0, 0.2)}
+  },
+  patterns: [
+    {route: '6', name: 'West - Middle', headsign: 'Middle', stops: ['1', '2'], offsets: [0, 120]}
+  ]
+};
 
 function sourceText(filename, features) {
+  if (filename === 'transit-network.json') return JSON.stringify(transitNetwork);
   if (filename === 'transit-routes.json') return JSON.stringify(transitRoutes);
   if (filename === 'turn-restrictions.json') return JSON.stringify(turnRestrictions);
   return JSON.stringify({type: 'FeatureCollection', entitySchemaVersion: 1, features: features[filename]});
 }
 
 const featureCountOf = (filename, features) =>
-  ({'transit-routes.json': transitRoutes.routes.length, 'turn-restrictions.json': 0})[filename] ??
-  features[filename].length;
+  ({
+    'transit-network.json': 1,
+    'transit-routes.json': transitRoutes.routes.length,
+    'turn-restrictions.json': 0
+  })[filename] ?? features[filename].length;
 
 // Every source file of the city as text, with the manifest the editor verifies it by.
 export function fixtureBundle(version = currentBundleVersion) {
-  const features = cityFeatures();
+  const features = version >= 5 ? version5Features() : cityFeatures();
   const filenames = bundleFilesByVersion[version];
   const files = new Map(filenames.map(filename => [filename, sourceText(filename, features)]));
   const layers = filenames.map(filename => ({

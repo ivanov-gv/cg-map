@@ -55,12 +55,28 @@ const version3Files = [
 const version4Files = [...version3Files, 'bridges.geojson', 'railways.geojson']
   .filter(filename => filename !== 'slopes.geojson')
   .sort();
+// Version 5 stores what was derived as one complete surface, merges relief and separates the transit network.
+const version5Files = [
+  'surface.geojson',
+  'roads.geojson',
+  'bridges.geojson',
+  'railways.geojson',
+  'buildings.geojson',
+  'places.geojson',
+  'settlements.geojson',
+  'relief.geojson',
+  'canyon-rims.geojson',
+  'transport-stops.geojson',
+  'transit-network.json',
+  'transit-routes.json'
+].sort();
 
 export const bundleFilesByVersion = {
   1: version1Files,
   2: version2Files,
   3: version3Files,
-  4: version4Files
+  4: version4Files,
+  5: version5Files
 };
 
 // The reviewed producer still emits version 3; version 4 is ready to read when it emits it.
@@ -118,5 +134,6 @@ export async function loadSourceBundle(baseURL, request = fetch) {
       return [metadata.filename, {metadata, collection}];
     })
   );
-  return new Map(entries);
+  // Rules and layer variants depend on the verified version, not on a filename the older versions also carry.
+  return Object.assign(new Map(entries), {manifest});
 }
