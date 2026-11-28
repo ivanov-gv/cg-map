@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {interiorPoint, isInside} from '../../geometry/interior-point.js';
-import {buildingBehaviors} from './layer-buildings.js';
+import {buildingBehaviors, nextEntranceNumber} from './layer-buildings.js';
 
 const square = (west, south, size) => [
   [west, south],
@@ -150,6 +150,13 @@ test('an interior point is inside a shape whose centre is not', () => {
     ]
   ];
   assert.ok(isInside(interiorPoint(hook), hook));
+});
+
+test('a new entrance gets the next number after the ones already on the building', () => {
+  const entranceWith = ref => ({feature: pointFeature({kind: 'entrance', ref}, [19.2505, 42.44])});
+  assert.equal(nextEntranceNumber([]), '1');
+  assert.equal(nextEntranceNumber([entranceWith('1'), entranceWith('2')]), '3');
+  assert.equal(nextEntranceNumber([entranceWith('7'), entranceWith('side')]), '8');
 });
 
 test('the inspector title stays short, while an overlap says what an untitled building is', () => {
