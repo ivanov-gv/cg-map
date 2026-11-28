@@ -83,6 +83,22 @@ function parkNameLayer() {
   });
 }
 
+// Stored shades will replace derived shaded slopes. Data publishes them in their own tile layer, so the style reads
+// only the polygon's own kind and paints it with the same tone and zoom as today's shaded slope.
+export function shadeLayers() {
+  return [
+    inDrawingGroup('shades', {
+      id: 'shades',
+      type: 'fill',
+      source,
+      'source-layer': 'shades',
+      minzoom: reliefMinZoom,
+      filter: ['==', ['get', 'kind'], 'shade'],
+      paint: {'fill-color': colors.shadedSlope, 'fill-antialias': false}
+    })
+  ];
+}
+
 export function slopeLayers() {
   return [
     slopeLayer('shaded', 'shaded-slopes', colors.shadedSlope),

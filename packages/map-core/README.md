@@ -14,9 +14,9 @@ service worker, editor modes or writes. See [architecture](../../docs/system-arc
 [UI 3.Core](https://github.com/ivanov-gv/cg-map/wiki/UI---3.Core) and the Penpot card "7 · Map primitives (Core)".
 [src/basemap-palette.js](src/basemap-palette.js) holds one colour token per primitive part.
 [src/drawing-order.js](src/drawing-order.js) lists the drawing groups bottom to top; every basemap layer records its
-group in `metadata`, and a unit test fails when a layer is out of order. The final order is `land` → `shaded-slopes` →
-`sunlit-slopes` → `canyon-walls` → `canyon-rims` → `water` → `buildings` → `meadows` → `contour-lines` → `railways` →
-`streets` → `trails` → `main-routes` → `stairways` → `bridges` → `bridge-streets` → `bridge-trails` →
+group in `metadata`, and a unit test fails when a layer is out of order. The final order is `land` → `shades` →
+`shaded-slopes` → `sunlit-slopes` → `canyon-walls` → `canyon-rims` → `water` → `buildings` → `meadows` → `contour-lines`
+→ `railways` → `streets` → `trails` → `main-routes` → `stairways` → `bridges` → `bridge-streets` → `bridge-trails` →
 `bridge-main-routes` → `bridge-stairways` → `labels` → `points-of-interest`. Ground roads stay above railways and below
 decks; roads on bridges stay above decks. Applications install points of interest after the style; both apps place them
 below street labels today.
@@ -43,9 +43,15 @@ installs the badge on demand. Railways sit above land use but below ground roads
 road crossing a track covers it. The tile layer carries no `bridge` or `layer` field, so the style has no `-on-bridge`
 railway copy and no way to raise a track above a deck. Station names remain in the labels group above roads.
 
+The `water` fill paints every polygon in the `water` tile layer with the open-water tone, including the stored sea
+polygon with `kind: sea` from the version-5 surface data. Its filter is already kind-agnostic, so publishing the sea
+needs no style change; coastline lines stay separate and get no river stroke.
+
 Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
-and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
-it, since the style has no sprite.
+and park names along the `green_area_labels` lines. The `shades` layer paints stored shade polygons from the `shades`
+tile layer (`kind: shade`) with the shaded tone, over green areas and below roads. The `slopes` and `ridges` layers stay
+while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged until data switches.
+`createMap` adds the summit triangle when the style first asks for it, since the style has no sprite.
 
 Contour lines are one faint type every 20 m. Their heights are labels along each line, kept un-flipped: the relief
 contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along

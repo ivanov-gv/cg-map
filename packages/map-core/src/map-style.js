@@ -1,7 +1,7 @@
 import {basemapColors as colors} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 import {canyonLayers} from './canyon-layers.js';
-import {hillLabelLayers, slopeLayers} from './hill-layers.js';
+import {hillLabelLayers, shadeLayers, slopeLayers} from './hill-layers.js';
 import {contourLabelLayers, contourLayers} from './contour-layers.js';
 import {railwayLabelLayers, railwayLayers} from './railway-layers.js';
 
@@ -446,6 +446,7 @@ export function mapStyle(basemapURL, assetBaseURL) {
     },
     layers: [
       ...landLayers(),
+      ...shadeLayers(),
       ...slopeLayers(),
       ...canyonLayers(),
       ...waterLayers(),
