@@ -1,6 +1,7 @@
 // Version 5 keeps the released behavior hooks away from files whose fields have changed, then adds the surface's own
 // behavior. Nothing here invents a stored value: someone draws a shade at its place and picks a river from the file.
 import {riverField} from '../water/river-picker.js';
+import {version5PlaceBehaviors} from '../places/layer-places.js';
 import {version5RouteBehaviors} from '../routes/layer-routes.js';
 import {surfacePreviewFeatures} from '../../map-tools/basemap-layers.js';
 import {defaultBehavior, registerBehaviors} from './layer-behaviors.js';
@@ -176,6 +177,7 @@ export const version5StoredPositions = storedPositionFeatures;
 // The app and the version tests register the same hooks; an earlier bundle must never see them.
 export function registerVersion5Behaviors() {
   registerBehaviors(version5Behaviors, null, 5);
+  registerBehaviors(version5PlaceBehaviors, null, 5);
   registerBehaviors(version5RouteBehaviors, null, 5);
   registerBehaviors(version5SurfaceBehaviors, null, 5);
   for (const [layerId, behaviors] of Object.entries(version5SurfaceBehaviorsByLayer)) {

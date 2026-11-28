@@ -9,7 +9,6 @@ import {behaviorOf, drawChoicesOf} from '../src/layers/shared/layer-behaviors.js
 import {isFormField} from '../src/inspector/property-form.js';
 import {routeBehaviors} from '../src/layers/routes/layer-routes.js';
 import {rulesForBundleVersion} from '../src/layers/shared/layer-rules.js';
-import {version5PoiProblem} from '../src/layers/places/layer-places.js';
 import {surfacePreviewFeatures} from '../src/map-tools/basemap-layers.js';
 import {
   linkedSelection,
@@ -515,26 +514,4 @@ test('version 5 routes keep the released display but derive neither headsign nor
   assert.deepEqual(version5Route.companionEdits({key: '0', feature: featureWithStops}, stopContext), []);
 });
 
-test('a version 5 POI stops the Editor before map-core can sort by the retired id', () => {
-  // A version 5 standalone POI carries `kind`, not the retired `id` or a `poiKind` on another object.
-  const cafes = [
-    feature({kind: 'cafe', name: 'First cafe'}, {type: 'Point', coordinates: [19, 42]}),
-    feature({kind: 'cafe', name: 'Second cafe'}, {type: 'Point', coordinates: [19.001, 42.001]})
-  ];
-  const sources = new Map([
-    [surfaceFile, {collection: {features: []}}],
-    ['places.geojson', {collection: {features: cafes}}]
-  ]);
-  const expected = 'Version 5 POIs in places.geojson need map-core support for iconPoint. Pinned map-core 0.4.0 sorts markers by the retired properties.id and throws TypeError: undefined is not iterable; the Editor stops before opening.';
-  assert.equal(version5PoiProblem(sources, 5), expected);
-  assert.equal(version5PoiProblem(sources, 3), null);
-  const withPoiKind = feature({poiKind: 'cafe', iconPoint: [19, 42]}, {type: 'Point', coordinates: [19, 42]});
-  assert.equal(
-    version5PoiProblem(new Map([['places.geojson', {collection: {features: [withPoiKind]}}]]), 5),
-    expected
-  );
-  assert.equal(version5PoiProblem(new Map([['places.geojson', {collection: {features: []}}]]), 5), null);
-  const oldId = new Map([['places.geojson', {collection: {features: [feature({id: 'node/1'}, {type: 'Point', coordinates: [19, 42]})]}}]]);
-  assert.equal(version5PoiProblem(oldId, 5), expected, 'the guard does not depend on which v5 fields a place uses');
-  assert.equal(version5PoiProblem(oldId, 3), null, 'the guard belongs only to version 5');
-});
+

@@ -259,7 +259,8 @@ function addedFeatureProblem({filename, reference, before, after}, rule, localPl
   const unlistedField = Object.keys(after).find(name => !allowedFields.includes(name));
   if (unlistedField) return `a new feature must not claim a feature ${unlistedField}`;
   const isPlace = filename === placesFile;
-  const allowedNames = new Set([...Object.keys(rule.properties), ...(isPlace ? placeIdentityFields : [])]);
+  const isVersion5Place = isPlace && bundleVersion >= 5;
+  const allowedNames = new Set([...Object.keys(rule.properties), ...(isPlace && !isVersion5Place ? placeIdentityFields : [])]);
   const unlistedName = Object.keys(after.properties).find(name => !allowedNames.has(name));
   if (unlistedName) return `a new feature must not claim ${unlistedName}`;
   const missing = Object.entries(rule.properties).find(
@@ -267,7 +268,7 @@ function addedFeatureProblem({filename, reference, before, after}, rule, localPl
   );
   if (missing) return `a new feature needs ${missing[0]}`;
   if (Object.hasOwn(rule.limitedKinds ?? {}, after.properties.kind)) return `${after.properties.kind} cannot be added`;
-  if (isPlace) return addedPlaceProblem(after, localId, localPlaceSource);
+  if (isPlace && !isVersion5Place) return addedPlaceProblem(after, localId, localPlaceSource);
   return filename === stopsFile ? addedStopProblem(after, localId, bundleVersion) : null;
 }
 

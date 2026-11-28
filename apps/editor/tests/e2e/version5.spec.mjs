@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, tapAt} from './city-steps.mjs';
+import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
 import {openFixtureCity, stepsOf} from './fixture-city.mjs';
 import {openObjects} from './workspace.mjs';
 
@@ -82,4 +82,36 @@ test('a version 5 municipal corner moves both sides of the border in one changes
     const vertices = geometry => geometry.coordinates[0].map(stepsOf).map(point => point.join(',')).sort();
     expect(vertices(westInPreview.geometry)).toEqual(vertices(westAfter.geometry));
   }
+});
+
+test('a version 5 POI added inside a building is linked and previewed through place layers', async ({page}, testInfo) => {
+  test.skip(testInfo.project.name === 'pages-mobile', 'The desktop drawing flow is used for this one acceptance case.');
+  await openFixtureCity(page, 5);
+  await chooseLayer(page, 'places', [-2, 2], 19);
+  await startDrawing(page, 'Add place');
+  await tapAt(page, [-2, 2]);
+
+  await page.locator('label:has-text("Name (required)") input').fill('Corner cafe');
+  await page.locator('label:has-text("Kind (required)") select').selectOption('cafe');
+  await page.locator('label:has-text("Building") button', {hasText: 'Choose'}).click();
+  await page.locator('dialog.river-dialog button', {hasText: 'Main street 14'}).click();
+  await applyEdit(page);
+
+  await expect.poll(() =>
+    page.evaluate(() => {
+      const source = window.editorDebug.map.getSource('places');
+      const features = source?.serialize?.().data?.features ?? source?._data?.features ?? [];
+      return features.some(feature =>
+        JSON.parse(feature.properties.activeIds ?? '[]').some(id => String(id).includes('local:'))
+      );
+    })
+  ).toBe(true);
+
+  await expect.poll(() =>
+    page.evaluate(() => {
+      const source = window.editorDebug.map.getSource('places');
+      const features = source?.serialize?.().data?.features ?? source?._data?.features ?? [];
+      return features.some(feature => feature.properties.label === 'Corner cafe');
+    })
+  ).toBe(true);
 });

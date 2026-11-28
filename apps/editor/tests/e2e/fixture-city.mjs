@@ -342,7 +342,6 @@ function version5Features() {
       ...released['buildings.geojson'],
       feature('node/10', {kind: 'entrance', entrance: 'main', buildingEntityId: 'way/1'}, point(-2, 1))
     ],
-    // The pinned map-core still reads the released place fields, so a v5 fixture leaves this file empty.
     'places.geojson': [],
     'settlements.geojson': [
       feature('node/80', {kind: 'settlement', name: 'Town', place: 'town', source: 'OpenStreetMap'}, point(-3, 8)),

@@ -32,7 +32,7 @@ import {
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
 import {bridgeBehaviors} from './layers/roads/layer-bridges.js';
 import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
-import {buildingAt, placeBehaviors, version5PoiProblem} from './layers/places/layer-places.js';
+import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
 import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
@@ -59,7 +59,7 @@ import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHi
 import {showLevelPicker} from './layers/roads/level-picker.js';
 import {hideToast, showToast} from './map-tools/toast.js';
 import {previewLayersFromStyle} from './map-tools/basemap-layers.js';
-import {WorkingMap} from './map-tools/working-map.js';
+import {effectivePlaceVisibilityLevel, WorkingMap} from './map-tools/working-map.js';
 import {
   hideInspector,
   inspectorHasFocus,
@@ -273,7 +273,7 @@ function withDerivedFacts(entry) {
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context. A behavior can ask for the whole of a shared file regardless of which of its layers
 // is open, so switching layers changes what can be picked without hiding what was already drawn or applied.
-function workingFeatures(displayFeatures) {
+function workingFeatures(_displayFeatures) {
   const featuresByFile = new Map();
   // A behavior that draws a shared file answers for the whole file, before the active layer narrows what can be picked.
   // Otherwise the partial set below would hide an earlier edit from another layer that owns the same file.
@@ -284,7 +284,7 @@ function workingFeatures(displayFeatures) {
   }
   for (const filename of shownFiles()) {
     if (featuresByFile.has(filename)) continue;
-    featuresByFile.set(filename, displayFeatures.filter(({properties}) => properties.sourceFile === filename));
+    featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
   for (const filename of session.changedFiles()) {
     if (featuresByFile.has(filename)) continue;
@@ -1065,21 +1065,25 @@ async function createEditorMap(mapMetadata) {
   }
 }
 
-function installMapLayers(visibilityConfig) {
+function installMapLayers(visibilityConfig, placePolicy) {
   const placeVisibility = parseVisibilityConfig(visibilityConfig);
-  const poiProblem = version5PoiProblem(sources, bundleVersion);
-  if (poiProblem) throw new Error(poiProblem);
   const publishedPlaces = sources.get('places.geojson').collection.features;
+  const displayPlaces = publishedPlaces.map(feature => {
+    if (feature.properties.visibilityLevel !== undefined) return feature;
+    const level = effectivePlaceVisibilityLevel(feature.properties, placePolicy);
+    return level === undefined ? feature : {...feature, properties: {...feature.properties, visibilityLevel: level}};
+  });
   const previewFeaturesByFile = new Map();
   for (const filename of sources.keys()) {
     const behavior = behaviorOf(filename, null, bundleVersion);
     if (behavior.previewFeatures) previewFeaturesByFile.set(filename, behavior.previewFeatures);
   }
-  installPlaces(map, publishedPlaces, placeVisibility);
+  installPlaces(map, displayPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
     basemapLayers: previewLayersFromStyle(map.getStyle().layers, bundleVersion),
     visibilityConfig: placeVisibility,
+    placePolicy,
     publishedPlaces,
     sharedSource: 'editor-source',
     previewFeaturesByFile
@@ -1129,10 +1133,11 @@ async function start() {
   installWorkspaceControls();
   const canReloadNow = () => !editing?.hasUnappliedEdit && !drafts?.hasOnlyInMemoryChanges();
   startOfflineCopy(canReloadNow, () => Boolean(map?.loaded()));
-  const [bundle, mapMetadata, visibilityConfig, layerRules] = await Promise.all([
+  const [bundle, mapMetadata, visibilityConfig, placePolicy, layerRules] = await Promise.all([
     loadSourceBundle(new URL('sources/', location.href)),
     loadJSON('data/map.json'),
     loadJSON('data/place-visibility.json'),
+    loadJSON('data/place-visibility-policy.json'),
     loadJSON('data/editor-layers.json')
   ]);
   sources = bundle;
@@ -1143,7 +1148,7 @@ async function start() {
   rules = {...rules, layers: {...rules.layers, [junctionFile]: junctionRule}};
   layers = availableLayers([...sources.keys()], bundleVersion);
   await createEditorMap(mapMetadata);
-  installMapLayers(visibilityConfig);
+  installMapLayers(visibilityConfig, placePolicy);
   startEditing(visibilityConfig);
   installMapInteraction();
   renderLayerChoices(layers, chooseLayer);
