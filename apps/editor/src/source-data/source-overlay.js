@@ -23,12 +23,6 @@ const levelLabelMinZoom = 16;
 const emptyCollection = () => ({type: 'FeatureCollection', features: []});
 const collectionOf = features => ({type: 'FeatureCollection', features});
 
-// A GeoJSON source parses new data in a worker, so a query or a pick can still see its previous rendered tile. Drop that
-// tile as the new data is set: a moved object must not leave a stale mark at the place it just left.
-function clearRenderedTiles(map, source) {
-  map.style?.tileManagers?.[source]?.clearTiles?.();
-}
-
 // Display copies preserve the properties used by public cartography and add the object's state. MapLibre needs a numeric
 // feature ID, so the position in the entries stands in for it here while the source feature keeps its own ID untouched.
 export function overlayCollection(entries, stateOf = () => 'editable', factsOf = () => ({})) {
@@ -374,16 +368,18 @@ export function createSourceOverlay(map) {
     }
   };
   setGuideMinZoom(guideMinZoom);
+  // A GeoJSON source update is asynchronous: a rendered hit can still resolve to an object's previous position until
+  // its tiles reload. Refreshing the affected sources keeps a moved place from appearing to stay where it was.
   return {
     layerIds: guideLayerIds,
     inspectionLayerIds: inspectionLayers,
     setData: collection => {
       overlay.setData(collection);
-      clearRenderedTiles(map, sourceName);
+      map.refreshTiles(sourceName);
     },
     setSelection: feature => {
       overlay.setSelection(feature);
-      if (!feature) clearRenderedTiles(map, selectionSource);
+      if (!feature) map.refreshTiles(selectionSource);
     },
     setApplied: features => setData(appliedSource, features),
     setDeletions: features => setData(deletionSource, features),

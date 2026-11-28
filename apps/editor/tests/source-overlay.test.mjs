@@ -94,9 +94,11 @@ test('a public POI marker resolves only to its currently visible members', () =>
 function overlayMap() {
   const layers = [{id: 'normal-name', type: 'symbol'}];
   const sources = {};
+  const refreshed = [];
   return {
-    layers, sources,
+    layers, sources, refreshed,
     addSource: (id, source) => { sources[id] = source; },
+    refreshTiles: source => { refreshed.push(source); },
     getSource: id => ({setData: data => { sources[id].data = data; }}),
     addLayer: layer => layers.push(layer),
     getStyle: () => ({layers}),
@@ -120,19 +122,12 @@ function overlayMap() {
   };
 }
 
-test('new overlay data drops the rendered tiles that still show the old objects', () => {
+test('new overlay data refreshes the rendered tiles that can show old objects', () => {
   const map = overlayMap();
-  const cleared = [];
-  map.style = {
-    tileManagers: {
-      'editor-source': {clearTiles: () => cleared.push('editor-source')},
-      'editor-source-selection': {clearTiles: () => cleared.push('editor-source-selection')}
-    }
-  };
   const overlay = createSourceOverlay(map);
   overlay.setData(overlayCollection([entry('0', stop)]));
   overlay.setSelection(null);
-  assert.deepEqual(cleared, ['editor-source', 'editor-source-selection']);
+  assert.deepEqual(map.refreshed, ['editor-source', 'editor-source-selection']);
 });
 
 test('guides have hollow interiors, and selection keeps its own visibility', () => {
