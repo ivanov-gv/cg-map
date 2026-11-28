@@ -64,11 +64,16 @@ export function buildingLinkTarget(entityId, context) {
   return entry && isBuildingFeature(entry.feature) ? entry : null;
 }
 
-function buildingName(entry, context) {
+function streetNameForId(streetId, context, streetById) {
+  if (!streetId) return null;
+  const street = streetById ? streetById.get(streetId) : streetLinkTarget(streetId, context);
+  return street ? (street.feature.properties.name ?? objectName(street.feature, roadsFile)) : null;
+}
+
+function buildingName(entry, context, streetById) {
   const {properties} = entry.feature;
-  const streetId = properties['addr:streetEntityId'];
-  const street = streetId && context ? streetLinkTarget(streetId, context) : null;
-  const streetName = street ? (street.feature.properties.name ?? objectName(street.feature, roadsFile)) : properties['addr:street'];
+  const streetName =
+    streetNameForId(properties['addr:streetEntityId'], context, streetById) ?? properties['addr:street'];
   const address = [streetName, properties['addr:housenumber']].filter(Boolean).join(' ');
   return address || properties.name || 'a building';
 }
@@ -145,30 +150,39 @@ function pickEntity(title, entries, labelOfEntry, valueOfEntry, onChosen) {
 
 const entityIdOf = entry => entry.feature.properties.entityId ?? entry.key;
 
-function buildingPickerLabel(entry, context) {
-  const name = buildingName(entry, context);
+function buildingPickerLabel(entry, context, streetById) {
+  const name = buildingName(entry, context, streetById);
   const id = entityIdOf(entry);
   return name === 'a building' ? `Building ${id}` : `${name} (${id})`;
 }
 
 function chooseBuilding(entries, context, onChosen) {
+  const streetById = new Map();
+  for (const entry of context.entriesOf(roadsFile)) {
+    if (!isStreetTarget(entry.feature)) continue;
+    streetById.set(entry.key, entry);
+    const entityId = entry.feature.properties.entityId;
+    if (entityId !== undefined) streetById.set(entityId, entry);
+  }
   const buildings = entries
     .filter(({feature}) => isBuildingFeature(feature))
-    .sort((first, second) =>
-      buildingPickerLabel(first, context).localeCompare(buildingPickerLabel(second, context))
-    );
+    .map(entry => ({entry, label: buildingPickerLabel(entry, context, streetById)}))
+    .sort((first, second) => first.label.localeCompare(second.label));
+  const labelByEntry = new Map(buildings.map(({entry, label}) => [entry, label]));
   pickEntity(
     'Choose a building',
-    buildings,
-    entry => buildingPickerLabel(entry, context),
+    buildings.map(({entry}) => entry),
+    entry => labelByEntry.get(entry),
     buildingId,
     onChosen
   );
 }
 
+const isStreetTarget = feature => feature.properties.kind === 'street';
+
 function chooseStreet(entries, onChosen) {
   const streets = entries
-    .filter(({feature}) => feature.geometry?.type === 'LineString')
+    .filter(({feature}) => isStreetTarget(feature))
     .sort((first, second) => objectName(first.feature, roadsFile).localeCompare(objectName(second.feature, roadsFile)));
   pickEntity(
     'Choose a street',
@@ -218,7 +232,7 @@ function version5UsualPlaceValues(_selection, context) {
 
 function streetLinkTarget(entityId, context) {
   const entry = context.findEntity(roadsFile, entityId);
-  return entry?.feature.geometry?.type === 'LineString' ? entry : null;
+  return entry && isStreetTarget(entry.feature) ? entry : null;
 }
 
 function featureAfterEdit(session, filename, edit) {

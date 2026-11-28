@@ -164,6 +164,26 @@ test('addr:streetEntityId must name a street object in roads.geojson', () => {
   );
 });
 
+test('a v5 road segment is never a street target', () => {
+  const context = contextWith({
+    [roadsFile]: [
+      {
+        filename: roadsFile,
+        key: 'way/11',
+        feature: {
+          type: 'Feature',
+          properties: {entityId: 'way/11', kind: 'residential', name: 'Road segment'},
+          geometry: {type: 'LineString', coordinates: [[19, 42], [19.001, 42]]}
+        }
+      }
+    ]
+  });
+  assert.equal(
+    version5PlaceLinkProblem(feature({name: 'Cafe', kind: 'cafe', 'addr:streetEntityId': 'way/11'}), context),
+    'addr:streetEntityId must name a street object in roads.geojson'
+  );
+});
+
 test('visibilityOverride is available on any v5 POI', () => {
   const behavior = v5Behavior();
   const fields = behavior.sections({properties: {name: 'Cafe', kind: 'cafe'}}).flatMap(section => section.fields);

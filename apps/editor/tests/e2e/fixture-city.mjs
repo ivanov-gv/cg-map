@@ -334,6 +334,7 @@ function version5Features() {
     ],
     'roads.geojson': [
       ...released['roads.geojson'],
+      feature('way/900', {kind: 'street', name: 'Main street'}, null),
       feature('node/40', {kind: 'junction', junctionKind: 'crossing'}, point(0, 0))
     ],
     'bridges.geojson': released['bridges.geojson'],
@@ -345,7 +346,7 @@ function version5Features() {
               ...item,
               properties: {
                 ...item.properties,
-                'addr:streetEntityId': 'way/30',
+                'addr:streetEntityId': 'way/900',
                 'addr:housenumber': '14',
                 'building:levels': '5'
               }
@@ -362,7 +363,7 @@ function version5Features() {
     'building-labels.geojson': [
       ...released['building-labels.geojson'].map(item => {
         if (item.properties.osm_id !== 'way/1') return item;
-        const properties = {...item.properties, 'addr:streetEntityId': 'way/30'};
+        const properties = {...item.properties, 'addr:streetEntityId': 'way/900'};
         delete properties['addr:street'];
         return {...item, properties};
       })
@@ -370,7 +371,7 @@ function version5Features() {
     'places.geojson': [
       feature(
         'node/20',
-        {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe', 'addr:streetEntityId': 'way/30'},
+        {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe', 'addr:streetEntityId': 'way/900'},
         point(-1, 1)
       )
     ],
