@@ -45,6 +45,7 @@ import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} 
 import {stopBehaviors} from './layers/stops/layer-stops.js';
 import {waterBehaviors} from './layers/water/layer-water.js';
 import {registerVersion5Behaviors} from './layers/shared/version5-behaviors.js';
+import {placeLinkResultProblemForEdits} from './layers/places/layer-places.js';
 import {surfaceResultProblemForEdits} from './layers/shared/surface-edits.js';
 import {featureCapabilities, layerLockReason, rulesForBundleVersion, validateLayerRules} from './layers/shared/layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
@@ -600,11 +601,13 @@ function travelHistory(travel, afterTravel = () => {}) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  // Undo and redo can restore a shared imported step from another layer. The whole resulting surface is checked before
-  // any of its edits is written, so taking a step back can never leave an orphaned shade or a one-sided frame.
+  // Undo and redo can restore a shared imported step from another layer. The resulting files are checked before any edit
+  // is written, so taking a step back can never leave an orphaned shade, a one-sided frame, or a broken place link.
   const validate = edits => {
-    const problem = surfaceResultProblemForEdits(session, behaviorContext(), edits);
-    return problem ? `This step would leave the surface invalid: ${problem}` : null;
+    const context = behaviorContext();
+    const problem =
+      surfaceResultProblemForEdits(session, context, edits) ?? placeLinkResultProblemForEdits(session, context, edits);
+    return problem ? `This step would leave the data invalid: ${problem}` : null;
   };
   try {
     if (travel(validate) === null) return;

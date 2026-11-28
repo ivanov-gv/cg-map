@@ -77,6 +77,48 @@ async function checkOperation(operation, key, sources, rules, levels) {
   requireImportable(!problem, `${filename} ${JSON.stringify(reference)}: ${problem}`);
 }
 
+
+function checkProposedResult(session, sources, rules, edits) {
+  const bundleVersion = rules.bundleVersion ?? 3;
+  const placesFile = 'places.geojson';
+  const proposedStateByFile = new Map();
+  const proposedEntries = filename => {
+    if (!sources.has(filename)) return [];
+    if (proposedStateByFile.has(filename)) return proposedStateByFile.get(filename).entries;
+    const entries = session.workingEntries(filename).map(entry => ({...entry}));
+    const byKey = new Map(entries.map(entry => [entry.key, entry]));
+    for (const edit of edits) {
+      if (edit.filename !== filename) continue;
+      if (edit.after === null) byKey.delete(edit.key);
+      else byKey.set(edit.key, {key: edit.key, feature: edit.after});
+    }
+    const result = [...byKey.values()];
+    const byId = new Map();
+    for (const entry of result) {
+      byId.set(entry.key, entry);
+      const entityId = entry.feature.properties.entityId;
+      if (entityId !== undefined) byId.set(entityId, entry);
+    }
+    proposedStateByFile.set(filename, {entries: result, byId});
+    return result;
+  };
+  const proposedContext = {
+    bundleVersion,
+    entriesOf: proposedEntries,
+    findEntity: (filename, entityId) => {
+      proposedEntries(filename);
+      return proposedStateByFile.get(filename)?.byId.get(entityId) ?? null;
+    }
+  };
+  const surfaceProblem = surfaceResultProblemForEdits(session, proposedContext, edits);
+  requireImportable(!surfaceProblem, `surface.geojson: ${surfaceProblem}`);
+  if (bundleVersion >= 5 && sources.has(placesFile)) {
+    for (const {key, feature} of proposedEntries(placesFile)) {
+      const problem = version5PlaceLinkProblem(feature, proposedContext);
+      requireImportable(!problem, `places.geojson: ${key}: ${problem}`);
+    }
+  }
+}
 // Resumes a reviewed changeset on this snapshot, with the same checks as the importer. Everything is checked before the
 // first edit is recorded, so a refused file leaves the session untouched. What arrives is one step.
 export async function importChangeset(changeset, session, sources, rules, levels) {
@@ -118,35 +160,7 @@ export async function importChangeset(changeset, session, sources, rules, levels
   }
   const edits = operations.map(({filename, after}, index) => ({filename, key: keys[index], after}));
   const bundleVersion = rules.bundleVersion ?? 3;
-  const placesFile = 'places.geojson';
-  const proposedEntries = (filename, overlays) => {
-    if (!sources.has(filename)) return [];
-    const entries = session.workingEntries(filename).map(entry => ({...entry}));
-    const byKey = new Map(entries.map(entry => [entry.key, entry]));
-    for (const edit of overlays ?? []) {
-      if (edit.filename !== filename) continue;
-      if (edit.after === null) {
-        byKey.delete(edit.key);
-        continue;
-      }
-      byKey.set(edit.key, {key: edit.key, feature: edit.after});
-    }
-    return [...byKey.values()];
-  };
-  const entriesOf = filename => proposedEntries(filename, edits);
-  const proposedContext = {
-    entriesOf,
-    findEntity: (filename, entityId) =>
-      entriesOf(filename).find(({key, feature}) => key === entityId || feature.properties.entityId === entityId)
-  };
-  const surfaceProblem = surfaceResultProblemForEdits(session, proposedContext, edits);
-  requireImportable(!surfaceProblem, `surface.geojson: ${surfaceProblem}`);
-  if (bundleVersion >= 5 && sources.has(placesFile)) {
-    for (const {key, feature} of proposedEntries(placesFile, edits)) {
-      const problem = version5PlaceLinkProblem(feature, proposedContext);
-      requireImportable(!problem, `places.geojson: ${key}: ${problem}`);
-    }
-  }
+  checkProposedResult(session, sources, rules, edits);
   const filenames = [...sources.keys()];
   const layerIds = [
     ...new Set(operations.flatMap(({filename}) => layerIdsForFile(filename, bundleVersion, filenames)))

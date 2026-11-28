@@ -1,11 +1,12 @@
 // Places inside a building and points that stand on their own. A place belongs to the building it is on.
 import {createElementWithText} from '../../shared/dom.js';
 import {defaultBehavior} from '../shared/layer-behaviors.js';
+import {openEntityPickerDialog} from '../shared/entity-picker.js';
 import {geometryAreaSquareMetres} from '../../geometry/geometry-measures.js';
 import {isInside} from '../../geometry/interior-point.js';
 import {chosenField} from '../../inspector/form-controls.js';
 import {byFrequency} from '../../inspector/usual-values.js';
-import {addressText, buildingId, objectName} from '../shared/object-names.js';
+import {buildingId, objectName} from '../shared/object-names.js';
 
 const buildingsFile = 'buildings.geojson';
 const placesFile = 'places.geojson';
@@ -63,7 +64,14 @@ export function buildingLinkTarget(entityId, context) {
   return entry && isBuildingFeature(entry.feature) ? entry : null;
 }
 
-const buildingName = ({feature}) => addressText(feature.properties) || feature.properties.name || 'a building';
+function buildingName(entry, context) {
+  const {properties} = entry.feature;
+  const streetId = properties['addr:streetEntityId'];
+  const street = streetId && context ? streetLinkTarget(streetId, context) : null;
+  const streetName = street ? (street.feature.properties.name ?? objectName(street.feature, roadsFile)) : properties['addr:street'];
+  const address = [streetName, properties['addr:housenumber']].filter(Boolean).join(' ');
+  return address || properties.name || 'a building';
+}
 
 // Older rules do not let a place say which building it is in.
 const canBelongToBuilding = context => Boolean(context.rules.layers[placesFile].properties.buildingEntityId);
@@ -97,7 +105,7 @@ function placeSections({properties}) {
 function renderWhere(container, {feature, context}) {
   if (!feature.geometry) return;
   const building = buildingAt(feature.geometry.coordinates, context);
-  const text = building ? `Inside ${buildingName(building)}` : 'Stands on its own, not inside a building';
+  const text = building ? `Inside ${buildingName(building, context)}` : 'Stands on its own, not inside a building';
   const where = createElementWithText('p', `${text}. Move it to change.`);
   where.className = 'hint';
   container.append(where);
@@ -120,7 +128,7 @@ export const placeBehaviors = {
     renderExtras: renderWhere,
     dragTarget(geometry, context) {
       const building = buildingAt(geometry.coordinates, context);
-      return building && {feature: building.feature, label: `Inside ${buildingName(building)}`};
+      return building && {feature: building.feature, label: `Inside ${buildingName(building, context)}`};
     }
   }
 };
@@ -128,45 +136,39 @@ export const placeBehaviors = {
 const roadsFile = 'roads.geojson';
 
 function pickEntity(title, entries, labelOfEntry, valueOfEntry, onChosen) {
-  const dialog = document.createElement('dialog');
-  dialog.className = 'river-dialog';
-  dialog.append(createElementWithText('h2', title));
-  for (const entry of entries) {
-    const button = createElementWithText('button', labelOfEntry(entry));
-    button.type = 'button';
-    button.onclick = () => {
-      dialog.close();
-      onChosen(valueOfEntry(entry));
-    };
-    dialog.append(button);
-  }
-  const cancel = createElementWithText('button', 'Cancel');
-  cancel.type = 'button';
-  cancel.onclick = () => dialog.close();
-  dialog.append(cancel);
-  dialog.addEventListener('close', () => dialog.remove(), {once: true});
-  document.body.append(dialog);
-  dialog.showModal();
+  openEntityPickerDialog(
+    title,
+    entries.map(entry => ({label: labelOfEntry(entry), value: valueOfEntry(entry)})),
+    onChosen
+  );
 }
 
 const entityIdOf = entry => entry.feature.properties.entityId ?? entry.key;
 
-function buildingPickerLabel(entry) {
-  const name = buildingName(entry);
+function buildingPickerLabel(entry, context) {
+  const name = buildingName(entry, context);
   const id = entityIdOf(entry);
   return name === 'a building' ? `Building ${id}` : `${name} (${id})`;
 }
 
-function chooseBuilding(entries, onChosen) {
+function chooseBuilding(entries, context, onChosen) {
   const buildings = entries
     .filter(({feature}) => isBuildingFeature(feature))
-    .sort((first, second) => buildingPickerLabel(first).localeCompare(buildingPickerLabel(second)));
-  pickEntity('Choose a building', buildings, buildingPickerLabel, buildingId, onChosen);
+    .sort((first, second) =>
+      buildingPickerLabel(first, context).localeCompare(buildingPickerLabel(second, context))
+    );
+  pickEntity(
+    'Choose a building',
+    buildings,
+    entry => buildingPickerLabel(entry, context),
+    buildingId,
+    onChosen
+  );
 }
 
 function chooseStreet(entries, onChosen) {
   const streets = entries
-    .filter(({feature}) => feature.properties.kind === 'street')
+    .filter(({feature}) => feature.geometry?.type === 'LineString')
     .sort((first, second) => objectName(first.feature, roadsFile).localeCompare(objectName(second.feature, roadsFile)));
   pickEntity(
     'Choose a street',
@@ -182,7 +184,7 @@ function buildingField(value, context) {
     'buildingEntityId',
     value,
     'Choose',
-    (_current, onChosen) => chooseBuilding(context.entriesOf(buildingsFile), onChosen),
+    (_current, onChosen) => chooseBuilding(context.entriesOf(buildingsFile), context, onChosen),
     'Clear'
   );
 }
@@ -216,7 +218,48 @@ function version5UsualPlaceValues(_selection, context) {
 
 function streetLinkTarget(entityId, context) {
   const entry = context.findEntity(roadsFile, entityId);
-  return entry && entry.feature.properties.kind === 'street' ? entry : null;
+  return entry?.feature.geometry?.type === 'LineString' ? entry : null;
+}
+
+function featureAfterEdit(session, filename, edit) {
+  const change = edit.after;
+  if (change === null) {
+    try {
+      return session.baseFeature(filename, edit.key);
+    } catch {
+      return null;
+    }
+  }
+  if (change && typeof change === 'object' && 'operation' in change && 'before' in change) return change.after;
+  return change;
+}
+
+function proposedFileEntries(session, edits, filename) {
+  let entries;
+  try {
+    entries = session.workingEntries(filename).map(entry => ({...entry}));
+  } catch {
+    return [];
+  }
+  const byKey = new Map(entries.map(entry => [entry.key, entry]));
+  for (const edit of edits) {
+    if (edit.filename !== filename) continue;
+    const feature = featureAfterEdit(session, filename, edit);
+    if (feature === null) byKey.delete(edit.key);
+    else byKey.set(edit.key, {key: edit.key, feature});
+  }
+  return [...byKey.values()];
+}
+
+function proposedEntityIndex(session, edits, filename) {
+  const entries = proposedFileEntries(session, edits, filename);
+  const byId = new Map();
+  for (const entry of entries) {
+    byId.set(entry.key, entry);
+    const entityId = entry.feature.properties.entityId;
+    if (entityId !== undefined) byId.set(entityId, entry);
+  }
+  return {entries, byId};
 }
 
 export function version5PlaceLinkProblem(feature, context) {
@@ -230,12 +273,39 @@ export function version5PlaceLinkProblem(feature, context) {
   return null;
 }
 
+// The proposed file state after edits, with entity lookups built once per file.
+export function proposedPlaceLinkContext(session, edits) {
+  const buildings = proposedEntityIndex(session, edits, buildingsFile);
+  const roads = proposedEntityIndex(session, edits, roadsFile);
+  const places = proposedFileEntries(session, edits, placesFile);
+  const indexByFile = new Map([
+    [buildingsFile, buildings.byId],
+    [roadsFile, roads.byId]
+  ]);
+  return {
+    places,
+    findEntity: (filename, entityId) => indexByFile.get(filename)?.get(entityId) ?? null
+  };
+}
+
+export function placeLinkResultProblemForEdits(session, context, edits) {
+  if ((context?.bundleVersion ?? 3) < 5) return null;
+  const relevant = edits.some(edit => [placesFile, buildingsFile, roadsFile].includes(edit.filename));
+  if (!relevant) return null;
+  const proposed = proposedPlaceLinkContext(session, edits);
+  for (const {key, feature} of proposed.places) {
+    const problem = version5PlaceLinkProblem(feature, proposed);
+    if (problem) return `places.geojson: ${key}: ${problem}`;
+  }
+  return null;
+}
+
 function renderVersion5Where(container, {feature, context}) {
   if (!feature.geometry) return;
   const building = feature.properties.buildingEntityId
     ? buildingLinkTarget(feature.properties.buildingEntityId, context)
     : null;
-  const text = building ? `Inside ${buildingName(building)}` : 'Stands on its own, not inside a building';
+  const text = building ? `Inside ${buildingName(building, context)}` : 'Stands on its own, not inside a building';
   const where = createElementWithText('p', `${text}. Pick a building to link it.`);
   where.className = 'hint';
   container.append(where);

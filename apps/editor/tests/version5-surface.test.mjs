@@ -513,5 +513,3 @@ test('version 5 routes keep the released display but derive neither headsign nor
   assert.match(prepared.properties.directions[0].entityId, /^local:/, 'a new direction still gets producer identity');
   assert.deepEqual(version5Route.companionEdits({key: '0', feature: featureWithStops}, stopContext), []);
 });
-
-

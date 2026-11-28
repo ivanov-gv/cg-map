@@ -46,6 +46,7 @@ import {isSameHandle, moveVertex, roundedCoordinate, vertexHandles} from '../geo
 import {rightAngledCorner} from '../geometry/geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from '../layers/shared/layer-behaviors.js';
+import {placeLinkResultProblemForEdits} from '../layers/places/layer-places.js';
 import {featureCapabilities, featureProblem, operationProblem} from '../layers/shared/layer-rules.js';
 import {hasMagnetEffect} from '../map-tools/magnet-tools.js';
 import {hideModeBar, setCrossVisible, setModeNotice, showModeBar} from '../map-tools/mode-bar.js';
@@ -613,9 +614,13 @@ export class InspectorEditing {
     return null;
   }
 
-  // Why the file this step would leave cannot be recorded, even when each edit looks sound on its own.
+  // Why the files this step would leave cannot be recorded, even when each edit looks sound on its own.
   #resultProblemOf(edits) {
-    return this.#behavior.resultProblem(edits, this.#context.behaviorContext());
+    const context = this.#context.behaviorContext();
+    return (
+      this.#behavior.resultProblem(edits, context) ??
+      placeLinkResultProblemForEdits(this.#context.session, context, edits)
+    );
   }
 
   // Records the edit together with others of the same step.

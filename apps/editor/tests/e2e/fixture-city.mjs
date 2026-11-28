@@ -339,11 +339,40 @@ function version5Features() {
     'bridges.geojson': released['bridges.geojson'],
     'railways.geojson': released['railways.geojson'],
     'buildings.geojson': [
-      ...released['buildings.geojson'],
+      ...released['buildings.geojson'].map(item =>
+        item.properties.entityId === 'way/1'
+          ? {
+              ...item,
+              properties: {
+                ...item.properties,
+                'addr:streetEntityId': 'way/30',
+                'addr:housenumber': '14',
+                'building:levels': '5'
+              }
+            }
+          : item
+      ).map(item => {
+        if (item.properties.entityId !== 'way/1') return item;
+        const properties = {...item.properties};
+        delete properties['addr:street'];
+        return {...item, properties};
+      }),
       feature('node/10', {kind: 'entrance', entrance: 'main', buildingEntityId: 'way/1'}, point(-2, 1))
     ],
+    'building-labels.geojson': [
+      ...released['building-labels.geojson'].map(item => {
+        if (item.properties.osm_id !== 'way/1') return item;
+        const properties = {...item.properties, 'addr:streetEntityId': 'way/30'};
+        delete properties['addr:street'];
+        return {...item, properties};
+      })
+    ],
     'places.geojson': [
-      feature('node/20', {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe'}, point(-1, 1))
+      feature(
+        'node/20',
+        {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe', 'addr:streetEntityId': 'way/30'},
+        point(-1, 1)
+      )
     ],
     'settlements.geojson': [
       feature('node/80', {kind: 'settlement', name: 'Town', place: 'town', source: 'OpenStreetMap'}, point(-3, 8)),

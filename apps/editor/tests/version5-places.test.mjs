@@ -4,7 +4,11 @@ import {parseVisibilityConfig, placeVisibilityLevel} from '@ivanov-gv/map-core';
 import {behaviorOf, registerBehaviors} from '../src/layers/shared/layer-behaviors.js';
 import {importChangeset} from '../src/editing/changeset.js';
 import {operationProblem} from '../src/layers/shared/layer-rules.js';
-import {placeBehaviors, version5PlaceLinkProblem} from '../src/layers/places/layer-places.js';
+import {
+  placeBehaviors,
+  placeLinkResultProblemForEdits,
+  version5PlaceLinkProblem
+} from '../src/layers/places/layer-places.js';
 import {registerVersion5Behaviors} from '../src/layers/shared/version5-behaviors.js';
 
 registerBehaviors(placeBehaviors);
@@ -26,7 +30,18 @@ const buildingEntry = (key, properties = {kind: 'building', building: 'yes'}) =>
   feature: {
     type: 'Feature',
     properties: {entityId: key, ...properties},
-    geometry: {type: 'Polygon', coordinates: [[[19, 42], [19.001, 42], [19.001, 42.001], [19, 42.001], [19, 42]]]}
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [19, 42],
+          [19.001, 42],
+          [19.001, 42.001],
+          [19, 42.001],
+          [19, 42]
+        ]
+      ]
+    }
   }
 });
 
@@ -294,4 +309,106 @@ test('import refuses a v5 place whose buildingEntityId does not name a building'
     () => importChangeset(changeset, session, sources, rules, new Set([1, 2, 3, 4, 5])),
     /buildingEntityId must name a building/
   );
+});
+
+test('import builds target collections once per file when validating many place links', async () => {
+  const building = buildingEntry('way/1');
+  const existingPlaces = Array.from({length: 200}, (_, index) => ({
+    filename: placesFile,
+    key: `node/${index + 100}`,
+    feature: feature(
+      {entityId: `node/${index + 100}`, kind: 'cafe', name: `Cafe ${index}`, buildingEntityId: 'way/1'},
+      [19.26 + index * 0.0001, 42.44]
+    )
+  }));
+  const sources = new Map([
+    [placesFile, {metadata: {sha256: 'p'}, collection: {type: 'FeatureCollection', features: existingPlaces.map(entry => entry.feature)}}],
+    [buildingsFile, {metadata: {sha256: 'b'}, collection: {type: 'FeatureCollection', features: [building.feature]}}],
+    [roadsFile, {metadata: {sha256: 'r'}, collection: {type: 'FeatureCollection', features: []}}]
+  ]);
+  const calls = { [buildingsFile]: 0, [roadsFile]: 0, [placesFile]: 0 };
+  const session = {
+    changedFiles: () => [],
+    isChanged: () => false,
+    workingEntries: filename => {
+      calls[filename] = (calls[filename] ?? 0) + 1;
+      if (filename === buildingsFile) return [building];
+      if (filename === placesFile) return existingPlaces;
+      return [];
+    },
+    recordEdits: () => {},
+    saveFieldItem: () => {}
+  };
+  const rules = {
+    version: 2,
+    bundleVersion: 5,
+    localPlaceSource: 'OpenStreetMap',
+    layers: {
+      [placesFile]: {
+        operations: ['add', 'modify', 'delete'],
+        geometries: ['Point'],
+        properties: {kind: {requiredOnAdd: true, enum: ['cafe']}, name: {maxLength: 120}, buildingEntityId: {maxLength: 64}}
+      },
+      [buildingsFile]: {
+        operations: ['add', 'modify', 'delete'],
+        geometries: ['Polygon'],
+        properties: {kind: {requiredOnAdd: true, enum: ['building']}, building: {required: true, enum: ['yes']}}
+      },
+      [roadsFile]: {operations: ['add', 'modify', 'delete'], geometries: ['LineString'], properties: {kind: {enum: ['street']}}}
+    }
+  };
+  const changeset = {
+    version: 2,
+    id: 'c1',
+    createdAt: '2026-11-28T00:00:00Z',
+    author: 'test',
+    reason: 'test',
+    bases: {[placesFile]: 'p', [buildingsFile]: 'b', [roadsFile]: 'r'},
+    operations: [
+      {
+        filename: placesFile,
+        operation: 'add',
+        reference: {localId: 'local:00000000-0000-4000-8000-000000000001'},
+        before: null,
+        beforeFingerprint: null,
+        after: feature({kind: 'cafe', name: 'Standalone'})
+      }
+    ]
+  };
+  await importChangeset(changeset, session, sources, rules, new Set([1, 2, 3, 4, 5]));
+  assert.equal(calls[buildingsFile], 1);
+  assert.equal(calls[roadsFile], 0);
+  assert.equal(calls[placesFile], 1);
+});
+
+test('deleting a building linked by a v5 POI is refused by the proposed-state link check', () => {
+  const building = buildingEntry('way/1');
+  const place = {filename: placesFile, key: 'node/20', feature: feature({entityId: 'node/20', kind: 'cafe', buildingEntityId: 'way/1'})};
+  const session = {
+    bundleVersion: 5,
+    workingEntries: filename => (filename === placesFile ? [place] : filename === buildingsFile ? [building] : [])
+  };
+  const problem = placeLinkResultProblemForEdits(
+    session,
+    {bundleVersion: 5},
+    [{filename: buildingsFile, key: 'way/1', after: null}]
+  );
+  assert.match(problem, /buildingEntityId must name a building/);
+});
+
+test('redoing deletion of a street linked by a v5 POI is refused', async () => {
+  const {EditSession} = await import('../src/editing/edit-session.js');
+  const street = streetEntry('way/10', 'Main street');
+  const place = {filename: placesFile, key: '0', feature: feature({entityId: 'node/20', kind: 'cafe', 'addr:streetEntityId': 'way/10'})};
+  const sources = new Map([
+    [placesFile, {metadata: {sha256: 'p'}, collection: {type: 'FeatureCollection', features: [place.feature]}}],
+    [roadsFile, {metadata: {sha256: 'r'}, collection: {type: 'FeatureCollection', features: [street.feature]}}],
+    [buildingsFile, {metadata: {sha256: 'b'}, collection: {type: 'FeatureCollection', features: []}}]
+  ]);
+  const session = new EditSession(sources);
+  const streetKey = session.workingEntries(roadsFile)[0].key;
+  session.recordEdits('roads', [{filename: roadsFile, key: streetKey, after: null}]);
+  session.undo('roads');
+  const validate = edits => placeLinkResultProblemForEdits(session, {bundleVersion: 5}, edits);
+  assert.throws(() => session.redo('roads', validate), /addr:streetEntityId must name a street/);
 });
