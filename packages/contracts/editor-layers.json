@@ -294,16 +294,18 @@
         "scrub",
         "sports",
         "cemetery",
-        "playground"
+        "playground",
+        "shade"
       ],
       "properties": {
         "kind": {
           "required": true,
-          "enum": ["park", "garden", "woods", "meadow", "grass", "scrub", "sports", "cemetery", "playground"]
+          "enum": ["park", "garden", "woods", "meadow", "grass", "scrub", "sports", "cemetery", "playground", "shade"]
         },
         "name": {"maxLength": 120},
         "name:en": {"maxLength": 120},
-        "destination": {"type": "boolean"}
+        "destination": {"type": "boolean"},
+        "greenAreaEntityId": {"pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"}
       },
       "limitedKinds": {
         "country": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en"]},

@@ -29,9 +29,11 @@ test('the level table has consecutive levels with increasing zooms and an admitt
 
 test('editor bundle versions freeze each version and add to the one before', () => {
   const schema = readJSON('editor-bundle.schema.json');
-  assert.deepEqual(schema.properties.version.enum, [1, 2, 3, 4]);
+  assert.deepEqual(schema.properties.version.enum, [1, 2, 3, 4, 5]);
   const branches = new Map(schema.oneOf.map(branch => [branch.properties.version.const, branch]));
-  assert.deepEqual([...branches.keys()].sort(), [1, 2, 3, 4]);
+  assert.deepEqual([...branches.keys()].sort(), [1, 2, 3, 4, 5]);
+  // The producer still emits version 3, so the declared versions must not move the branch it finds with at(-1).
+  assert.equal(schema.oneOf.at(-1).properties.version.const, 3);
   const originalFiles = [
     'building-labels.geojson',
     'buildings.geojson',
@@ -68,11 +70,15 @@ test('editor bundle versions freeze each version and add to the one before', () 
         'turn-restrictions.json'
       ]
     ],
-    [4, ['bridges.geojson', 'railways.geojson']]
+    [4, ['bridges.geojson', 'railways.geojson']],
+    [5, []]
   ]);
-  const removals = new Map([[4, ['slopes.geojson']]]);
+  const removals = new Map([
+    [4, ['slopes.geojson']],
+    [5, ['ridges.geojson', 'slopes.geojson']]
+  ]);
   let previousFiles = [];
-  for (const version of [1, 2, 3, 4]) {
+  for (const version of [1, 2, 3, 4, 5]) {
     const branch = branches.get(version);
     const files = branch.properties.layers.items.properties.filename.enum;
     const removedFiles = removals.get(version) ?? [];
@@ -84,11 +90,11 @@ test('editor bundle versions freeze each version and add to the one before', () 
     previousFiles = files;
   }
   // A bundled file without rules could be shown and never edited, and rules without a file could never be reached.
-  // The rules cover both the emitted version 3 and the pending version 4 the Editor will read next.
-  const emittedAndPendingFiles = [
-    ...new Set([...branches.get(3).properties.layers.items.properties.filename.enum, ...previousFiles])
+  // The rules are not versioned: they cover versions 3 and 4, and version 5's files are a subset of version 4's.
+  const declaredFiles = [
+    ...new Set([...branches.values()].flatMap(branch => branch.properties.layers.items.properties.filename.enum))
   ].sort();
-  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), emittedAndPendingFiles);
+  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), declaredFiles);
 });
 
 test('bridges are an editable polygon layer with only reviewed property rules', () => {
@@ -135,6 +141,19 @@ test('ridges are drawn facts with only the reviewed property rules', () => {
       summitName: {maxLength: 120},
       name: {maxLength: 120}
     }
+  });
+});
+
+// A limited kind cannot be added, so the shade link is an editable land kind with an entity-ID pattern.
+test('land rules offer a shade kind with a green-area entity-ID pattern', () => {
+  const land = readJSON('editor-layers.json').layers['land.geojson'];
+  assert.deepEqual(land.operations, ['add', 'modify', 'delete']);
+  assert.deepEqual(land.geometries, ['Polygon', 'MultiPolygon']);
+  assert.ok(land.editableKinds.includes('shade'));
+  assert.ok(land.properties.kind.enum.includes('shade'));
+  assert.equal(Object.hasOwn(land.limitedKinds, 'shade'), false);
+  assert.deepEqual(land.properties.greenAreaEntityId, {
+    pattern: '^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$'
   });
 });
 

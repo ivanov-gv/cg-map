@@ -74,8 +74,9 @@ mechanical rules in services/backend, through golangci-lint; everything else res
 - `make setup` sets `core.hooksPath` to [platform/git-hooks](../../platform/git-hooks). pre-commit rejects commits in
   the main checkout, then runs agent-rule drift, check-repo, and all-source Markdown lint/format checks, plus
   ESLint/gofmt/py_compile on staged code. ESLint runs from a staged file's project when that project owns a config, and
-  from the repository root otherwise. pre-push runs `make check`, plus `make check-go` when backend files changed. See
-  [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
+  from the repository root otherwise. Pre-push runs `make verify PKG=<folder>` for the folders its CI planner selects,
+  plus `make check-go` for backend, and falls back to `make check` (and Go checks when available) when the diff or
+  planner fails. See [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
 - CI runs each affected folder's checks and browser acceptance, and `CI gate` reports the result. `main` requires it, so
   `gh pr merge --auto --squash` waits for it. `make check` runs them all locally, including `check:agents`. CI is the
   contract.
@@ -95,7 +96,7 @@ mechanical rules in services/backend, through golangci-lint; everything else res
   [template](../plans/TEMPLATE.md) before launching a multi-session task. Split work by component so sessions touch
   disjoint directories.
 - Integrate one branch at a time: rebase and resolve conflicts in the worktree, then merge by PR when its tests pass on
-  GitHub. The pre-push `make check` is required (builds and non-browser checks, no browser suites); other local runs are
+  GitHub. The pre-push hook runs the checks selected by the pushed diff (no browser suites); other local runs are
   optional: [the rule](../../.github/TESTING.md).
 
 ## Changing the rules
