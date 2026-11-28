@@ -22,12 +22,14 @@ import {stopBehaviors} from '../apps/editor/src/layers/stops/layer-stops.js';
 import {waterBehaviors} from '../apps/editor/src/layers/water/layer-water.js';
 import {operationProblem} from '../apps/editor/src/layers/shared/layer-rules.js';
 import {collectionOf} from '../apps/editor/src/source-data/source-records.js';
+import {bundleFilesByVersion, currentBundleVersion} from '../apps/editor/src/source-data/source-bundle.js';
 
 const {applyChangeset} = await import(dataToolURL('apply-changeset.mjs'));
 const now = '2026-11-25T10:00:00.000Z';
 const envelope = {id: 'layer-export', createdAt: now, author: 'Integration Test', reason: 'One layer'};
 const rules = readContractJSON('editor-layers.json');
 const levels = new Set(readContractJSON('place-visibility.json').levels.map(({level}) => level));
+const loadedSources = bundleFilesByVersion[currentBundleVersion];
 
 const layerBehaviors = [
   buildingBehaviors,
@@ -55,7 +57,13 @@ export class HeadlessEditor {
     testContext.after(() => fs.rmSync(this.#root, {recursive: true, force: true}));
     stageContractsInto(this.#root);
     stageDataInto(this.#root);
-    this.#sources = new Map(Object.keys(rules.layers).map(filename => [filename, this.#loadSource(filename)]));
+    const missingSources = loadedSources.filter(filename => !fs.existsSync(stagedSourcePath(this.#root, filename)));
+    assert.deepEqual(
+      missingSources,
+      [],
+      `bundle version ${currentBundleVersion} has every source: ${missingSources.join(', ')}`
+    );
+    this.#sources = new Map(loadedSources.map(filename => [filename, this.#loadSource(filename)]));
     this.session = new EditSession(this.#sources);
     this.context = {
       session: this.session,

@@ -73,8 +73,13 @@ jobs:
       contracts: ${{ steps.plan.outputs.contracts }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+      proofs_determined: ${{ steps.plan.outputs.proofs_determined }}
     env: &plan-env
-      PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+      PLAN_BASE: ${{ github.event.before || format('origin/{0}', github.base_ref || 'main') }}
+      # A PR's recorded base SHA goes stale after merging main; merge-base with the current base branch keeps the plan
+      # scoped to the PR head's own changes.
+      PLAN_BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+      PLAN_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       # The PR gate test call proves what the PR changes; a manual dispatch can still run everything.
       RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
     steps: &plan-steps
@@ -85,6 +90,8 @@ jobs:
         uses: ./.github/actions/plan
         with:
           base: ${{ env.PLAN_BASE }}
+          base_ref: ${{ env.PLAN_BASE_REF }}
+          head: ${{ env.PLAN_HEAD }}
           run_all: ${{ env.RUN_ALL }}
   plan-test-run:
     name: (test-run) Plan
@@ -101,6 +108,7 @@ jobs:
       contracts: ${{ steps.plan.outputs.contracts }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+      proofs_determined: ${{ steps.plan.outputs.proofs_determined }}
     env: *plan-env
     steps: *plan-steps
 
