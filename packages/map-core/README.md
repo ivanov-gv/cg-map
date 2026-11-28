@@ -79,6 +79,15 @@ values therefore change icon. Marker identity, co-location groups, tap hits and 
 apps/core-demo still pin data 0.1.0, whose places have no `entityId`, so a POI without one uses its legacy `id`.
 apps/editor pins 0.2.0, which already publishes `entityId`.
 
+A POI's zoom-band level comes from `placeVisibilityLevel(feature, config)`: its own `visibilityOverride`, then a stored
+`visibilityLevel` (today's released places), then the policy's exact `kinds` rule, then the `categories` default for the
+kind resolved by `placeCategory`, then the fallback. `parseVisibilityConfig(rawConfig, policy)` accepts the data-owned
+policy table: a supplied policy's `fallbackLevel` replaces the contract's `legacyFallbackLevel`, while a caller without
+a policy keeps the legacy fallback. The policy's fallback and its `kinds` and `categories` rules must all name supported
+levels other than the individually reviewed level 1, and its two tables are copied at parse time so later caller
+mutation cannot bypass that validation. An invalid POI level fails with the POI's `entityId ?? id`, and
+`normalizePlaces` calls this same function so the Editor's single-POI preview cannot disagree with the directory.
+
 ## Lifecycle
 
 `createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite

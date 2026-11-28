@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {pinnedContractsRoot} from '../tests/pinned-contracts.mjs';
 import {pinnedCoreRoot} from '../tests/pinned-core.mjs';
-import {pinnedDataRoot} from '../tests/pinned-data.mjs';
+import {pinnedDataRoot, readPinnedSource} from '../tests/pinned-data.mjs';
 
 const applicationRoot = fileURLToPath(new URL('../', import.meta.url));
 const repositoryRoot = path.resolve(applicationRoot, '..', '..');
@@ -49,13 +49,17 @@ function runFixtureBuild(fixture, extraEnvironment = {}) {
   });
 }
 
-test('a default build takes map-core from this commit', t => {
+test('a default build takes map-core from this commit and carries the data policy', t => {
   const fixture = createFixture(t);
   fileSystem.appendFileSync(path.join(fixture.localCore, 'src/index.js'), '\nexport const localCoreMarker = true;\n');
   const result = runFixtureBuild(fixture);
   assert.equal(result.status, 0, `${result.stdout ?? ''}${result.stderr ?? ''}`);
   const builtCore = fileSystem.readFileSync(path.join(fixture.output, 'map-core/index.js'), 'utf8');
   assert.match(builtCore, /localCoreMarker/);
+  assert.deepEqual(
+    JSON.parse(fileSystem.readFileSync(path.join(fixture.output, 'data/place-visibility-policy.json'), 'utf8')),
+    JSON.parse(readPinnedSource('place-visibility-policy.json'))
+  );
 });
 
 test('a release build refuses core, data and contracts roots outside its pins', t => {

@@ -7,6 +7,7 @@ import {
   installPlaces,
   offsetCoordinate,
   parseVisibilityConfig,
+  placeVisibilityLevel,
   registerArchiveProtocol,
   satelliteBounds,
   setSatelliteVisible,
@@ -25,17 +26,79 @@ let isOverlayVisible = true;
 let isOverlayEditable = false;
 const overlayShiftPixels = 20;
 
+// Version-5 samples have a stable local identity and content version, but no stored level: the policy or an override
+// must resolve them. They sit outside the default view, so today's map looks unchanged until a button is used.
+export const demoVisibilitySamples = [
+  {
+    id: 'kind-band',
+    label: 'Kind rule · museum',
+    feature: {
+      type: 'Feature',
+      properties: {
+        entityId: 'local:7c9e6679-7425-4f5d-9e8b-8f1b0d3a2c41',
+        entityVersion: 'sha256:29b088dea7f03528cf7cce8d0e3207955073d27da72ed35293b713d2b0c883fb',
+        kind: 'museum',
+        name: 'Kind-band sample'
+      },
+      geometry: {type: 'Point', coordinates: [19.56, 42.11]}
+    }
+  },
+  {
+    id: 'override-band',
+    label: 'visibilityOverride · 4',
+    feature: {
+      type: 'Feature',
+      properties: {
+        entityId: 'local:2f8b1c4d-6a7e-4b3f-8c2d-5e9a0f1b7d63',
+        entityVersion: 'sha256:542759f9156598cb6a34227545b8c6c41a020f4326884a321818bdeca18d4730',
+        kind: 'museum',
+        name: 'Override-band sample',
+        visibilityOverride: 4
+      },
+      geometry: {type: 'Point', coordinates: [19.58, 42.11]}
+    }
+  }
+];
+
+// A failed policy fetch leaves no resolved levels, so the card must not sit at "Loading" beside the error banner.
+function showZoomBandsUnavailable() {
+  const readout = elementById('zoom-bands');
+  if (readout.textContent === 'Loading zoom bands') readout.textContent = 'Zoom bands unavailable';
+}
+
 // Errors stay visible even if only part of a map rendered successfully.
 function showError(error) {
   elementById('error').textContent = error.message;
   elementById('error').hidden = false;
   elementById('status').textContent = 'Map needs attention';
+  showZoomBandsUnavailable();
 }
 
 async function loadJSON(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   return response.json();
+}
+
+// Parses the data-owned policy once, then states the level each sample POI will use when it is installed.
+export function resolveDemoVisibility(rawConfig, policy) {
+  const config = parseVisibilityConfig(rawConfig, policy);
+  const samples = demoVisibilitySamples.map(sample => {
+    const level = placeVisibilityLevel(sample.feature, config);
+    return {
+      id: sample.id,
+      label: sample.label,
+      level,
+      zoom: config.thresholds.get(level),
+      coordinates: [...sample.feature.geometry.coordinates]
+    };
+  });
+  return {config, samples};
+}
+
+function showZoomBandReadout(samples) {
+  const descriptions = samples.map(sample => `${sample.label}: level ${sample.level} · zoom ${sample.zoom}`);
+  elementById('zoom-bands').textContent = descriptions.join(' · ');
 }
 
 // Controls need a live map, so they stay disabled during startup and map recreation.
@@ -90,7 +153,8 @@ async function createConceptMap() {
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
   await whenMapReady(map);
-  installPlaces(map, places.features, visibilityConfig);
+  const sampleFeatures = demoVisibilitySamples.map(sample => sample.feature);
+  installPlaces(map, [...places.features, ...sampleFeatures], visibilityConfig);
   overlayFeature = {
     type: 'Feature',
     id: 'concept',
@@ -184,7 +248,7 @@ function clearOverlaySelection() {
 }
 
 // Handlers read the current map, so they stay valid when the map is recreated.
-function registerConceptControls() {
+function registerConceptControls(samples) {
   elementById('reset').onclick = () => map.jumpTo({center: defaultCenter, zoom: 15, bearing: 0, pitch: 0});
   elementById('recreate').onclick = recreateConceptMap;
   elementById('satellite').onclick = toggleSatellite;
@@ -195,22 +259,29 @@ function registerConceptControls() {
   elementById('overlay-toggle').onclick = toggleOverlay;
   elementById('overlay-editable').onclick = toggleOverlayEditable;
   elementById('clear-selection').onclick = clearOverlaySelection;
+  for (const sample of samples) {
+    elementById(sample.id).onclick = () => map.jumpTo({center: sample.coordinates, zoom: sample.zoom});
+  }
 }
 
 // Loads shared inputs once; only the map itself is recreated by the lifecycle control.
 async function start() {
-  const [mapMetadata, sourcePlaces, rawVisibilityConfig] = await Promise.all([
+  const [mapMetadata, sourcePlaces, rawVisibilityConfig, rawVisibilityPolicy] = await Promise.all([
     loadJSON('data/map.json'),
     loadJSON('data/places.geojson'),
-    loadJSON('data/place-visibility.json')
+    loadJSON('data/place-visibility.json'),
+    loadJSON('data/place-visibility-policy.json')
   ]);
   places = sourcePlaces;
   if (!archiveFilenamePattern.test(mapMetadata.archive)) throw new Error('Invalid map archive metadata.');
-  visibilityConfig = parseVisibilityConfig(rawVisibilityConfig);
+  const {config, samples} = resolveDemoVisibility(rawVisibilityConfig, rawVisibilityPolicy);
+  visibilityConfig = config;
+  showZoomBandReadout(samples);
   archiveURL = 'pmtiles://' + new URL(`data/${mapMetadata.archive}`, location.href).href;
   registerArchiveProtocol(maplibregl, pmtiles);
-  registerConceptControls();
+  registerConceptControls(samples);
   await recreateConceptMap();
 }
 
-start().catch(showError);
+// Consumer tests import the resolver without a DOM; only a browser starts the app.
+if (typeof document !== 'undefined') start().catch(showError);
