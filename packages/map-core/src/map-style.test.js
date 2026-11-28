@@ -12,9 +12,21 @@ function walkingLayersFor(properties) {
   return filters.filter(({filter}) => filter.filter({zoom: 16}, feature)).map(({id}) => id);
 }
 
-// Every walking way gets exactly one walking pattern: two would draw dots over steps or over a park route.
-test('each walking path class lands in exactly one walking layer', () => {
+// Version 5 stores the walker's class on each path, including tracks. Today's `main` and unclassified fixtures stay
+// in this regression test, so reverting the stored-class rule makes the whole test fail.
+test('walking patterns come from stored pathClass with legacy fixtures', () => {
   const cases = [
+    [{kind: 'footway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'cycleway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'track', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'footway', pathClass: 'city'}, 'footways'],
+    [{kind: 'path', pathClass: 'city'}, 'footways'],
+    [{kind: 'track', pathClass: 'city'}, 'footways'],
+    [{kind: 'footway', pathClass: 'trail'}, 'paths'],
+    [{kind: 'track', pathClass: 'trail'}, 'paths'],
+    [{kind: 'cycleway', pathClass: 'city'}, 'cycleways'],
+    [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
+    [{kind: 'steps', pathClass: 'trail'}, 'steps'],
     [{kind: 'footway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'cycleway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'footway', pathClass: 'main'}, 'footways'],
@@ -23,14 +35,16 @@ test('each walking path class lands in exactly one walking layer', () => {
     [{kind: 'path', inGreenArea: true}, 'paths'],
     [{kind: 'track', pathClass: 'trail', inGreenArea: true}, 'paths'],
     [{kind: 'cycleway', pathClass: 'main'}, 'cycleways'],
-    [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
-    [{kind: 'steps', pathClass: 'trail'}, 'steps'],
     [{kind: 'steps', inGreenArea: true}, 'steps']
   ];
   for (const [properties, expectedLayer] of cases) {
     assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
   }
-  assert.deepEqual(walkingLayersFor({kind: 'pedestrian', pathClass: 'trail'}), [], 'a pedestrian street stays a street');
+  assert.deepEqual(
+    walkingLayersFor({kind: 'pedestrian', pathClass: 'city'}),
+    [],
+    'a pedestrian street stays a street'
+  );
 });
 
 for (const prefix of ['/', '/cg-map/']) {

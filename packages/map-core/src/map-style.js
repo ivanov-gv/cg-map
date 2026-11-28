@@ -275,20 +275,38 @@ function bridgeLayers() {
 }
 
 // Walking paths by what they are to a walker (wiki UI 3.Core, Penpot hills rules):
-// - park routes: main (paved or maintained) paths inside green areas, a cream path over a casing;
-// - trails: rough paths anywhere, and paths and unpaved footways without a class, a quiet dotted line;
-// - city footpaths: main footways and paths outside green areas, small round dots;
+// - park routes: stored `park` paths, a cream path over a casing;
+// - trails: stored `trail` paths, a quiet dotted line;
+// - city footpaths: stored `city` paths, small round dots;
 // - stairways: a step pattern; cycleways outside parks keep their own blue dashes.
+// Today's tiles store `main` instead of `park`/`city`, so a main path still uses `inGreenArea` to pick its pattern.
+// Their unclassified footways and tracks still use the trail pattern until data publishes a class for every path.
 const pathClass = ['get', 'pathClass'];
 const isInGreenArea = ['==', ['get', 'inGreenArea'], true];
-const isParkRoute = ['all', isInGreenArea, ['==', pathClass, 'main'], roadKindFilter(['footway', 'path', 'cycleway'])];
+const isParkRoute = [
+  'all',
+  roadKindFilter(['footway', 'path', 'track', 'cycleway']),
+  [
+    'any',
+    ['==', pathClass, 'park'],
+    ['all', ['==', pathClass, 'main'], isInGreenArea]
+  ]
+];
 // Steps, cycleways and pedestrian streets with a trail class (OSM sac_scale) keep their own pattern.
 const isTrail = [
   'all',
   roadKindFilter(['footway', 'path', 'track']),
   ['any', ['==', pathClass, 'trail'], ['!', ['has', 'pathClass']]]
 ];
-const isCityFootpath = ['all', ['!', isInGreenArea], ['==', pathClass, 'main'], roadKindFilter(['footway', 'path'])];
+const isCityFootpath = [
+  'all',
+  roadKindFilter(['footway', 'path', 'track']),
+  [
+    'any',
+    ['==', pathClass, 'city'],
+    ['all', ['==', pathClass, 'main'], ['!', isInGreenArea]]
+  ]
+];
 const isCyclewayOutsideParks = ['all', roadKindFilter(['cycleway']), ['!', isParkRoute]];
 // Dot spacing in line widths, the Penpot value: a zero-length dash with round caps is one dot, so 1.8 px dots sit about
 // 4 px apart, centre to centre.

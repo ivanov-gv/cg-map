@@ -53,14 +53,28 @@ tile layer (`kind: shade`) with the shaded tone, over green areas and below road
 while today's archive still publishes them; no shade feature exists yet, so the map looks unchanged until data switches.
 `createMap` adds the summit triangle when the style first asks for it, since the style has no sprite.
 
-Contour lines are one faint type every 20 m. Their heights are labels along each line, kept un-flipped: the relief
-contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along
-each line; the wiki's single column down a hill's sunlit slope is not reproduced.
+Contour lines stay one faint type every 20 m in data's `contours` tile layer. map-core reads no stored `index` flag:
+that flag belongs to data's tile build, where it decides which lines survive low zoom. Their heights are labels along
+each line, kept un-flipped: the relief contract runs every contour with higher ground on its left, so the digits face
+uphill. MapLibre spaces the labels along each line; the wiki's single column down a hill's sunlit slope is not
+reproduced.
 
-Walking paths are drawn by what they are to a walker: park routes (main paths with `inGreenArea`) as a cream path over a
-casing, trails and city footpaths as quiet round dots, stairways with a step pattern. Meadows fill only land areas with
-the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an application that
-hit-tests walking paths by layer id adds them when it upgrades.
+Settlement names stay with the applications: Web draws its city names today. map-core has no settlement label layer;
+drawing them there is Feature #534, outside this task.
+
+Walking paths are drawn by what they are to a walker: stored `pathClass: park` as a cream path over a casing,
+`pathClass: trail` and `pathClass: city` as quiet round dots, and stairways with a step pattern. The stored classes also
+apply to tracks. Today's tiles store `main` instead of `park`/`city`, so a main path still uses `inGreenArea` to pick
+its pattern, and a path with no class still uses the trail pattern; those are the only legacy fallbacks. Meadows fill
+only land areas with the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an
+application that hit-tests walking paths by layer id adds them when it upgrades.
+
+POI symbols always follow the feature's own `kind`, with the kind-to-category table in
+[src/place-category.js](src/place-category.js). A stored `category` is ignored even for `fuel`, `hotel` and `yes`, the
+three kinds that occur in two categories today (owner decision on #517, 2026-11-28); the five POIs with conflicting
+values therefore change icon. Marker identity, co-location groups, tap hits and `activeIds` use `entityId`; apps/web and
+apps/core-demo still pin data 0.1.0, whose places have no `entityId`, so a POI without one uses its legacy `id`.
+apps/editor pins 0.2.0, which already publishes `entityId`.
 
 ## Lifecycle
 

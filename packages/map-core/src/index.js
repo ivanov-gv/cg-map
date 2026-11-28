@@ -17,4 +17,5 @@ export {createGeoJSONOverlay} from './overlay.js';
 export {installPlaces} from './places.js';
 export {placeColors} from './palette.js';
 export {installPlaceIcons, placeIconId, sharedPlaceIcon} from './poi-icons.js';
+export {placeCategory} from './place-category.js';
 export * from './place-visibility.js';
