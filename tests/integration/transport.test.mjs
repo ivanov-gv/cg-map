@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import * as pmtiles from 'pmtiles';import {ArchiveSource} from '../../apps/web/src/offline.js';
+import * as pmtiles from 'pmtiles';import {ArchiveSource} from '../../apps/web/src/offline/offline.js';
 const manifest=JSON.parse(fs.readFileSync('dist/web/data/manifest.json')),bytes=fs.readFileSync('dist/web/'+manifest.archive.path);globalThis.pmtiles=pmtiles;
 test('a host ignoring Range loads one complete archive and serves valid local slices',async()=>{
  let requests=0;globalThis.fetch=async()=>{requests++;return new Response(bytes,{headers:{'Content-Length':String(bytes.length)}});};

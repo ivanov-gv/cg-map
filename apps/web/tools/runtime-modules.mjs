@@ -10,50 +10,76 @@ const supportDirectoryNames = new Set(['test-support', 'test-helpers', 'tests', 
 // Import lists may span lines, so the clause between the keyword and `from` must accept newlines.
 const moduleDependencyPattern = /\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?['"]([^'"]+)['"]/g;
 const dynamicImportPattern = /\bimport\s*\(/;
-const gestureHandlerPattern = /\.(?:scrollZoom|touchZoomRotate|doubleClickZoom|dragPan|dragRotate|keyboard|boxZoom|touchPitch|cooperativeGestures)\b/;
+const gestureHandlerPattern =
+  /\.(?:scrollZoom|touchZoomRotate|doubleClickZoom|dragPan|dragRotate|keyboard|boxZoom|touchPitch|cooperativeGestures)\b/;
 const publishedCoreEntry = '@ivanov-gv/map-core';
 
-// main's flat import graph has no naming or layer rule that predicts every edge: interface.js imports history-steps.js
-// while app.js does not, and offline.js imports only core.js. Keep the reviewed edges as rules, scoped to the modules
-// main constrained. New modules follow the general relative-module rule below instead of needing a list entry.
+// Per-folder rules: a module may import its own folder, the folders listed here, and the published map-core entry.
+// app.js is the root entry and may import any feature folder. sw.js has no local imports.
+const folderDependencyRules = new Map([
+  ['', new Set(['shared', 'map', 'selection', 'routing', 'transport', 'offline', 'location', 'interface'])],
+  ['shared', new Set(['shared'])],
+  ['map', new Set(['shared', 'map'])],
+  ['selection', new Set(['shared', 'selection', 'interface'])],
+  ['routing', new Set(['shared', 'routing'])],
+  ['transport', new Set(['shared', 'transport'])],
+  ['offline', new Set(['shared', 'transport', 'offline'])],
+  ['location', new Set(['shared', 'location'])],
+  ['interface', new Set(['shared', 'interface'])]
+]);
+
+// Modules that existed on main with no local imports may not gain any, even inside their folder.
 const modulesWithoutLocalImports = new Set([
-  'app-updates.js',
-  'attribution.js',
-  'core.js',
-  'data-mode.js',
-  'device-class.js',
-  'dom.js',
-  'history-steps.js',
-  'map-taps.js',
-  'object-selection.js',
-  'point-selection.js',
-  'routing.js',
-  'vehicle-direction.js'
+  'map/attribution.js',
+  'offline/app-updates.js',
+  'shared/core.js',
+  'transport/data-mode.js',
+  'shared/device-class.js',
+  'shared/dom.js',
+  'interface/history-steps.js',
+  'map/map-taps.js',
+  'selection/object-selection.js',
+  'selection/point-selection.js',
+  'routing/routing.js',
+  'transport/vehicle-direction.js'
 ]);
-const notImportedByAppOnMain = new Set(['history-steps.js', 'routing.js', 'transit-routing.js', 'vehicle-direction.js']);
 
+const notImportedByAppOnMain = new Set([
+  'interface/history-steps.js',
+  'routing/routing.js',
+  'routing/transit-routing.js',
+  'transport/vehicle-direction.js'
+]);
+
+// Reviewed edges from main, translated to their feature-folder paths. New modules may be added, but these modules keep
+// the imports main allowed and may not widen transitively to other main modules.
 const moduleImportRulesOnMain = new Map([
-  ['interface.js', ['./device-class.js', './history-steps.js']],
-  ['location-controls.js', [publishedCoreEntry, './core.js', './dom.js', './position.js', './status-messages.js']],
-  ['map-selection.js', [publishedCoreEntry, './point-selection.js']],
-  ['offline-controls.js', ['./data-mode.js', './dom.js', './offline.js']],
-  ['offline.js', ['./core.js']],
-  ['place-details.js', [publishedCoreEntry, './core.js', './dom.js']],
-  ['place-selection.js', [publishedCoreEntry, './core.js', './dom.js', './interface.js', './place-details.js']],
-  ['position.js', ['./core.js']],
-  ['public-map-layers.js', [publishedCoreEntry, './core.js']],
-  ['route-planner.js', ['./core.js', './dom.js', './routing.js', './transit-routing.js']],
-  ['status-messages.js', ['./core.js']],
-  ['transit-routing.js', ['./core.js']],
-  ['transport.js', ['./data-mode.js', './vehicle-direction.js']]
+  ['interface/interface.js', ['../shared/device-class.js', './history-steps.js']],
+  [
+    'location/location-controls.js',
+    [publishedCoreEntry, '../shared/core.js', '../shared/dom.js', './position.js', '../shared/status-messages.js']
+  ],
+  ['selection/map-selection.js', ['./point-selection.js']],
+  ['offline/offline-controls.js', ['../transport/data-mode.js', '../shared/dom.js', './offline.js']],
+  ['offline/offline.js', ['../shared/core.js']],
+  ['selection/place-details.js', [publishedCoreEntry, '../shared/core.js', '../shared/dom.js']],
+  [
+    'selection/place-selection.js',
+    ['../interface/interface.js', publishedCoreEntry, '../shared/core.js', '../shared/dom.js', './place-details.js']
+  ],
+  ['location/position.js', ['../shared/core.js']],
+  ['map/public-map-layers.js', [publishedCoreEntry, '../shared/core.js']],
+  ['routing/route-planner.js', ['../shared/dom.js', './routing.js', './transit-routing.js', '../shared/core.js']],
+  ['shared/status-messages.js', ['./core.js']],
+  ['routing/transit-routing.js', ['../shared/core.js']],
+  ['transport/transport.js', ['./vehicle-direction.js', './data-mode.js']]
 ]);
 
-// Fixtures stand in for the flat tree, so they use this list instead of a second hand-written copy.
+// Fixtures stand in for the reviewed tree, so they use this list instead of a second hand-written copy.
 export const mainRuntimeModules = Object.freeze(
   ['app.js', ...modulesWithoutLocalImports, ...moduleImportRulesOnMain.keys()].sort()
 );
 
-// Returns app.js's entry with every flat module it imported on main, excluding those reached only through another module.
 function appEntryOnMain() {
   const dependencies = mainRuntimeModules
     .filter(module => module !== 'app.js' && !notImportedByAppOnMain.has(module))
@@ -133,7 +159,16 @@ function isRuntimeDependency(sourceDirectory, sourceFile, dependency) {
   return isRuntimeSourcePath(relativePath);
 }
 
-// True when an import resolves to a module that did not exist in main's flat tree.
+function folderName(moduleName) {
+  const directory = path.posix.dirname(moduleName);
+  return directory === '.' ? '' : directory;
+}
+
+function topLevelFolder(moduleName) {
+  const folder = folderName(moduleName);
+  return folder.split('/')[0] ?? folder;
+}
+
 function isModuleAddedSinceMain(sourceDirectory, sourceFile, dependency) {
   const relativePath = dependencyPath(sourceDirectory, sourceFile, dependency);
   if (relativePath === 'sw.js' || mainRuntimeModules.includes(relativePath)) return false;
@@ -146,42 +181,64 @@ function dependenciesOnMainFor(moduleName) {
   return null;
 }
 
-function localModuleName(specifier) {
-  return specifier.startsWith('./') ? specifier.slice(2) : null;
+function localModuleName(specifier, moduleName) {
+  if (specifier === publishedCoreEntry || !specifier.startsWith('.')) return null;
+  return dependencyPath('.', path.join('.', moduleName), specifier);
 }
 
 function assertReviewedImport(sourceDirectory, moduleName, filePath, dependency) {
   const dependenciesOnMain = dependenciesOnMainFor(moduleName) ?? [];
-  const isReviewedSpecifier =
-    dependency === publishedCoreEntry ||
-    (isRelativeJs(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency));
+  const isRelativeRuntimeModule = isRelativeJs(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency);
+  const isReviewedSpecifier = dependency === publishedCoreEntry || isRelativeRuntimeModule;
   // A module with local edges on main may gain a new module; a zero-import module may not, and no reviewed module may
   // gain a different module that main already knew.
   const isZeroImportModule = dependenciesOnMain.length === 0;
-  const addsModule = dependenciesOnMain.length > 0 && isModuleAddedSinceMain(sourceDirectory, filePath, dependency);
+  const addsModule =
+    dependenciesOnMain.length > 0 && isRelativeRuntimeModule && isModuleAddedSinceMain(sourceDirectory, filePath, dependency);
+  const reviewedPaths = new Set(
+    dependenciesOnMain.map(specifier => localModuleName(specifier, moduleName)).filter(Boolean)
+  );
+  const dependencyTarget = isRelativeRuntimeModule ? dependencyPath(sourceDirectory, filePath, dependency) : null;
+  const isReviewedEdge =
+    dependency === publishedCoreEntry
+      ? dependenciesOnMain.includes(publishedCoreEntry)
+      : Boolean(dependencyTarget && reviewedPaths.has(dependencyTarget));
   const message = isZeroImportModule
     ? `${moduleName}: may not import ${dependency}. Modules with no local imports on main may not gain any local module, new or old.`
     : `${moduleName}: forbidden dependency ${dependency}. Web keeps main's reviewed import graph; only its listed modules and new modules are allowed.`;
+  assert.ok(isReviewedSpecifier && (isReviewedEdge || addsModule), message);
+}
+
+function allowedFoldersFor(moduleName) {
+  const folder = topLevelFolder(moduleName);
+  return folderDependencyRules.get(folder) ?? new Set(['shared', folder]);
+}
+
+function assertFolderBoundary(sourceDirectory, moduleName, filePath, dependency) {
+  const allowedFolders = allowedFoldersFor(moduleName);
+  if (dependency === publishedCoreEntry) return;
+  assert.ok(isRelativeJs(dependency), `${moduleName}: forbidden dependency ${dependency}.`);
   assert.ok(
-    isReviewedSpecifier && (dependenciesOnMain.includes(dependency) || addsModule),
-    message
+    isRuntimeDependency(sourceDirectory, filePath, dependency),
+    `${moduleName}: forbidden dependency ${dependency}. Only relative runtime modules inside src and the published @ivanov-gv/map-core entry are allowed.`
+  );
+  const dependencyModule = dependencyPath(sourceDirectory, filePath, dependency);
+  const dependencyFolder = topLevelFolder(dependencyModule);
+  assert.ok(
+    allowedFolders.has(dependencyFolder),
+    `${moduleName}: forbidden dependency ${dependency}. Feature folders may import only their allowed folders: ${[...allowedFolders].sort().join(', ')}.`
   );
 }
 
 function assertGeneralImport(sourceDirectory, moduleName, filePath, dependency) {
-  const isPublishedEntry = dependency === publishedCoreEntry;
-  const isRelativeRuntimeModule = isRelativeJs(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency);
-  assert.ok(
-    isPublishedEntry || isRelativeRuntimeModule,
-    `${moduleName}: forbidden dependency ${dependency}. Only relative runtime modules inside src and the published @ivanov-gv/map-core entry are allowed.`
-  );
+  assertFolderBoundary(sourceDirectory, moduleName, filePath, dependency);
 }
 
 function reviewedClosure(moduleName) {
   const reached = new Set([moduleName]);
   const visit = name => {
     for (const dependency of dependenciesOnMainFor(name) ?? []) {
-      const target = localModuleName(dependency);
+      const target = localModuleName(dependency, name);
       if (!target || reached.has(target)) continue;
       reached.add(target);
       visit(target);
@@ -214,17 +271,17 @@ function reachedMainModules(sourceDirectory, moduleName) {
   return mainRuntimeModules.filter(name => reached.has(name));
 }
 
-// A reviewed rule names a path on main. If #456 moves that path, the rule moves into that issue's per-folder rules.
+// A reviewed rule names a path from main. If that path moves again, update this file's per-folder rules.
 export function assertReviewedModulesExist(sourceDirectory = defaultSourceDirectory) {
   for (const moduleName of mainRuntimeModules) {
     assert.ok(
       fs.existsSync(path.join(sourceDirectory, moduleName)),
-      `${moduleName}: reviewed module missing from src. Move its rule into the per-folder rules of #456.`
+      `${moduleName}: reviewed module missing from src. Move its rule into this file's per-folder rules.`
     );
   }
 }
 
-// New modules may import any runtime module, but a reviewed module may not reach new main modules through them.
+// New modules may import any module in their allowed folders, but a reviewed module may not reach new main modules through them.
 function assertReviewedClosures(sourceDirectory) {
   for (const moduleName of mainRuntimeModules) {
     const allowed = reviewedClosures.get(moduleName);
@@ -249,13 +306,14 @@ function assertModuleBoundaries(sourceDirectory, moduleName) {
   for (const dependency of readDependencies(filePath)) {
     if (dependenciesOnMain) {
       assertReviewedImport(sourceDirectory, moduleName, filePath, dependency);
+      assertFolderBoundary(sourceDirectory, moduleName, filePath, dependency);
     } else {
       assertGeneralImport(sourceDirectory, moduleName, filePath, dependency);
     }
   }
 }
 
-// Enforces ADR 0015, the published-package boundary, and main's reviewed import graph for every runtime module.
+// Enforces ADR 0015, per-folder import boundaries, and main's reviewed import graph for every runtime module.
 export function assertRuntimeBoundaries(sourceDirectory = defaultSourceDirectory) {
   assertReviewedModulesExist(sourceDirectory);
   for (const moduleName of findRuntimeModules(sourceDirectory)) {

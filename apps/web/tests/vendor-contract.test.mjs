@@ -10,7 +10,7 @@ for (const file of ['maplibre-gl.js', 'pmtiles.js']) {
   virtualMachine.runInNewContext(fileSystem.readFileSync(bundleURL, 'utf8'), context, {filename: file});
 }
 test('every vendor entry point used by the application exists in the shipped bundles', () => {
-  const source = ['app.js', 'offline.js']
+  const source = ['app.js', 'offline/offline.js']
     .map(filename =>
       fileSystem.readFileSync(new URL('../../../dist/web/' + filename, import.meta.url), 'utf8')
     )

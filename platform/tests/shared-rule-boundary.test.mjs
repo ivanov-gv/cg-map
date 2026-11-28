@@ -16,6 +16,6 @@ test('the shared-rule guard rejects a project path added to the real rules sourc
   fs.writeFileSync(rulesFile, realRules);
   assert.doesNotThrow(() => assertSharedRulesHaveNoProjectFiles(scratchRoot));
 
-  fs.writeFileSync(rulesFile, `${realRules}\nexport const forbiddenProjectPath = 'apps/web/src/core.js';\n`);
+  fs.writeFileSync(rulesFile, `${realRules}\nexport const forbiddenProjectPath = 'apps/web/src/shared/core.js';\n`);
   assert.throws(() => assertSharedRulesHaveNoProjectFiles(scratchRoot), /must not name a project file/);
 });

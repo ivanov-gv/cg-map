@@ -580,9 +580,9 @@ activate.
 | [web/index.html](../../apps/web/public/index.html)                               | Page structure and accessible controls                               |
 | [web/style.css](../../apps/web/public/style.css)                                 | Responsive shell, map overlays, sidebar/card styling                 |
 | [web/app.js](../../apps/web/src/app.js)                                          | Startup, map integration, picking, UI events, places, download state |
-| [web/core.js](../../apps/web/src/core.js)                                        | Search folding/filtering, approximate distance, URL validation       |
+| [web/core.js](../../apps/web/src/shared/core.js)                                 | Search folding/filtering, approximate distance, URL validation       |
 | [map-core/map-style.js](../../packages/map-core/src/map-style.js)                | Basemap source and cartographic layers                               |
-| [web/offline.js](../../apps/web/src/offline.js)                                  | Archive byte-source abstraction, transport fallback, local downloads |
+| [web/offline.js](../../apps/web/src/offline/offline.js)                          | Archive byte-source abstraction, transport fallback, local downloads |
 | [web/sw.js](../../apps/web/src/sw.js)                                            | Shell caching, safe cached navigation, cache-version migration       |
 | `dist/web/data/manifest.json`                                                    | Archive identity, coverage metadata, offline shell inventory         |
 | `dist/web/offline-manifest.js`                                                   | Generated worker-readable shell configuration                        |

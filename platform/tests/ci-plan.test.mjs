@@ -88,7 +88,7 @@ const cases = [
     ['packages/contracts/places.schema.json'],
     ['platform', 'contracts', 'data', 'tests']
   ],
-  ['web source', ['apps/web/src/interface.js'], WEB],
+  ['web source', ['apps/web/src/interface/interface.js'], WEB],
   ['web browser job count', ['apps/web/browser-jobs.json'], WEB],
   ['web Makefile', ['apps/web/Makefile'], WEB],
   ['web package', ['apps/web/package.json'], WEB],
@@ -137,7 +137,7 @@ const cases = [
   ['browser test helpers', ['apps/web/tests/e2e/helpers.mjs'], WEB],
   ['web build tool', ['apps/web/tools/build.mjs'], WEB],
   ['new unmapped web source', ['apps/web/src/brand-new.js'], WEB],
-  ['web unit test', ['apps/web/tests/core.test.mjs'], WEB],
+  ['web unit test', ['apps/web/src/shared/core.test.js'], WEB],
   ['Markdown in the public web folder', ['apps/web/public/notes.md'], WEB],
   ['platform tooling', ['platform/tools/check-repo.mjs'], ['platform']],
   ['workflow', ['.github/workflows/web.yml'], ['workflows', 'platform']],
@@ -325,7 +325,7 @@ test('the retired root lint config selects only platform tooling', () => {
 });
 
 test('outputs give every folder a value and the selected test runs', () => {
-  const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
+  const changedFiles = ['apps/web/src/interface/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
   assert.equal(lines.length, FOLDERS.length + 7);
   assert.ok(lines.includes('apps-web=true'));
@@ -340,7 +340,7 @@ test('outputs give every folder a value and the selected test runs', () => {
 
 test('a changed folder workflow runs in place, while other changed workflows keep a separate test call', () => {
   const changedFiles = [
-    'apps/web/src/interface.js',
+    'apps/web/src/interface/interface.js',
     'docs/README.md',
     '.github/workflows/ci-apps-web.yml',
     '.github/workflows/ci-apps-editor.yml',
@@ -355,7 +355,7 @@ test('a changed folder workflow runs in place, while other changed workflows kee
 
 test('a web workflow change needs no planner matrix for its in-place call', () => {
   const workflow = 'ci-apps-web.yml';
-  const source = 'apps/web/tests/offline.test.mjs';
+  const source = 'apps/web/src/offline/offline.test.js';
   const changedFiles = [`.github/workflows/${workflow}`, source];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
   assert.ok(lines.includes(`ci_in_place_test_runs=["${workflow}"]`), 'the web call is not in place');
@@ -446,7 +446,7 @@ test('the browser image has its own pipeline, and a change to it selects no appl
 
 test('a merge publishes the image of each app it selected, and no other', () => {
   const appsFor = file => imageMatrix(planChanges([file]).folders).include.map(({app}) => app);
-  assert.deepEqual(appsFor('apps/web/src/interface.js'), ['web']);
+  assert.deepEqual(appsFor('apps/web/src/interface/interface.js'), ['web']);
   assert.deepEqual(appsFor('apps/editor/src/sw.js'), ['editor']);
   assert.deepEqual(appsFor('packages/map-core/src/map.js'), ['core-demo'], 'only core-demo runs unreleased core');
   assert.deepEqual(appsFor('packages/contracts/place-visibility.json'), [], 'consumers pin a published release');
@@ -530,8 +530,8 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   const deleted = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
   assert.match(deleted, /Folders: transit-relay, tests/);
 
-  fs.mkdirSync(path.join(repo, 'apps/web/src'), {recursive: true});
-  fs.writeFileSync(path.join(repo, 'apps/web/src/interface.js'), 'export const ui = true;\n');
+  fs.mkdirSync(path.join(repo, 'apps/web/src/interface'), {recursive: true});
+  fs.writeFileSync(path.join(repo, 'apps/web/src/interface/interface.js'), 'export const ui = true;\n');
   git('add', '.');
   git('commit', '-qm', 'web');
   const narrowed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});

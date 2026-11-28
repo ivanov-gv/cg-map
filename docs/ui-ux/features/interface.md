@@ -532,8 +532,8 @@ The same suite also checks real cover-screen sizes, map and dock Peek openings, 
 and down, a pull blocked by scrolled Fullscreen content, no-wheel behavior, selection clearing, dock/query preservation,
 focus return, the shared history step taken by Back and the Icon Button, both standalone chips hidden under Flip Peek
 and restored when the card closes, and the Mobile card guard. Pure Flip transition tests live in
-[flip-card.test.mjs](../../../apps/web/tests/flip-card.test.mjs), and the shared history steps are covered in
-[history-steps.test.mjs](../../../apps/web/tests/history-steps.test.mjs).
+[flip-card.test.js](../../../apps/web/src/interface/flip-card.test.js), and the shared history steps are covered in
+[history-steps.test.js](../../../apps/web/src/interface/history-steps.test.js).
 
 The Flip checks also cover the 36×4 grab bar with its 4 px top offset and Mobile colour in Peek and Fullscreen, the
 pointer cursor and clipped action row in Peek, building picks, and the shared step-back paths used by pulls, the Icon
