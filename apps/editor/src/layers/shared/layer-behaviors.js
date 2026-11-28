@@ -334,9 +334,7 @@ export function drawChoicesOf(layer, rules) {
 export function newFeatureFields(filename, localId, rules) {
   if (filename === 'places.geojson') {
     // Version 5 identifies a place only by its key, so the released id and source copies are gone.
-    return rules.bundleVersion >= 5
-      ? {properties: {}}
-      : {properties: {id: localId, source: rules.localPlaceSource}};
+    return rules.bundleVersion >= 5 ? {properties: {}} : {properties: {id: localId, source: rules.localPlaceSource}};
   }
   if (filename === 'settlements.geojson') return {properties: {source: rules.localPlaceSource}};
   // A version 5 stop carries its own stopId; the feature-level id belongs only to the released model.

@@ -334,16 +334,47 @@ function version5Features() {
     ],
     'roads.geojson': [
       ...released['roads.geojson'],
+      feature('way/900', {kind: 'street', name: 'Main street'}, null),
       feature('node/40', {kind: 'junction', junctionKind: 'crossing'}, point(0, 0))
     ],
     'bridges.geojson': released['bridges.geojson'],
     'railways.geojson': released['railways.geojson'],
     'buildings.geojson': [
-      ...released['buildings.geojson'],
+      ...released['buildings.geojson'].map(item =>
+        item.properties.entityId === 'way/1'
+          ? {
+              ...item,
+              properties: {
+                ...item.properties,
+                'addr:streetEntityId': 'way/900',
+                'addr:housenumber': '14',
+                'building:levels': '5'
+              }
+            }
+          : item
+      ).map(item => {
+        if (item.properties.entityId !== 'way/1') return item;
+        const properties = {...item.properties};
+        delete properties['addr:street'];
+        return {...item, properties};
+      }),
       feature('node/10', {kind: 'entrance', entrance: 'main', buildingEntityId: 'way/1'}, point(-2, 1))
     ],
-    // The pinned map-core still reads the released place fields, so a v5 fixture leaves this file empty.
-    'places.geojson': [],
+    'building-labels.geojson': [
+      ...released['building-labels.geojson'].map(item => {
+        if (item.properties.osm_id !== 'way/1') return item;
+        const properties = {...item.properties, 'addr:streetEntityId': 'way/900'};
+        delete properties['addr:street'];
+        return {...item, properties};
+      })
+    ],
+    'places.geojson': [
+      feature(
+        'node/20',
+        {entityId: 'node/20', kind: 'cafe', name: 'Seed cafe', 'addr:streetEntityId': 'way/900'},
+        point(-1, 1)
+      )
+    ],
     'settlements.geojson': [
       feature('node/80', {kind: 'settlement', name: 'Town', place: 'town', source: 'OpenStreetMap'}, point(-3, 8)),
       feature(

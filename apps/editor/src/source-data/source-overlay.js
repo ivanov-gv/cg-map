@@ -42,7 +42,10 @@ export function sourceEntriesForHits(hits, entries) {
   const placeIndices = new Map();
   const previewIndices = new Map();
   entries.forEach(({filename, feature, key}, index) => {
-    if (filename === placesFile) placeIndices.set(feature.properties.id, index);
+    if (filename === placesFile) {
+      const placeId = feature.properties.entityId ?? feature.properties.id ?? key;
+      if (placeId !== undefined) placeIndices.set(placeId, index);
+    }
     // The public cartography preview carries its working key, so a hit on it resolves to the same entry a guide would.
     previewIndices.set(`${filename}:${key}`, index);
   });

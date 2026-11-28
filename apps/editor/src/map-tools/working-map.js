@@ -30,9 +30,28 @@ export function previewLayers(publishedLayers, sourceName, sharedFilename = null
   });
 }
 
+function placeIdentity(feature) {
+  const identity =
+    feature.properties.entityId ?? feature.properties.id ?? feature.properties.selectionKey ?? feature.id;
+  if (typeof identity === 'string' && identity) return identity;
+  if (typeof identity === 'number' && Number.isFinite(identity)) return String(identity);
+  return undefined;
+}
+
+// Map-core resolves visibility from overrides, stored levels and the policy; the editor only adds identity for
+// features that carry it outside properties, such as local working features keyed by selectionKey.
+function withPlaceIdentity(features) {
+  return features.map(feature => {
+    const identity = placeIdentity(feature);
+    const needsIdentity =
+      identity !== undefined && feature.properties.entityId === undefined && feature.properties.id === undefined;
+    return needsIdentity ? {...feature, properties: {...feature.properties, entityId: identity}} : feature;
+  });
+}
+
 // The markers the public map would draw for these places. Throws on a place it could not publish, as the public app does.
 function placeMarkers(features, visibilityConfig) {
-  const directory = normalizePlaces(features, visibilityConfig);
+  const directory = normalizePlaces(withPlaceIdentity(features), visibilityConfig);
   return featureCollection(buildPlaceMarkers(directory, markerKeys(directory)));
 }
 
@@ -185,7 +204,7 @@ export class WorkingMap {
   // A move or addition can create a shared marker with a level combination absent from the release. Install its bands
   // in the public drawing order, and remove only these extra layers when restoring the published map.
   #installWorkingPlaceBands(features) {
-    const directory = normalizePlaces(features, this.#visibilityConfig);
+    const directory = normalizePlaces(withPlaceIdentity(features), this.#visibilityConfig);
     const {names, icons} = placeLayers(placeBands(directory, this.#visibilityConfig), this.#visibilityConfig);
     let nextLayerId = 'road-labels';
     for (const layer of [...names, ...icons].reverse()) {

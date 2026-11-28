@@ -32,7 +32,7 @@ import {
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
 import {bridgeBehaviors} from './layers/roads/layer-bridges.js';
 import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
-import {buildingAt, placeBehaviors, version5PoiProblem} from './layers/places/layer-places.js';
+import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
 import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
@@ -45,6 +45,7 @@ import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} 
 import {stopBehaviors} from './layers/stops/layer-stops.js';
 import {waterBehaviors} from './layers/water/layer-water.js';
 import {registerVersion5Behaviors} from './layers/shared/version5-behaviors.js';
+import {placeLinkResultProblemForEdits} from './layers/places/layer-places.js';
 import {surfaceResultProblemForEdits} from './layers/shared/surface-edits.js';
 import {featureCapabilities, layerLockReason, rulesForBundleVersion, validateLayerRules} from './layers/shared/layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
@@ -273,7 +274,7 @@ function withDerivedFacts(entry) {
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context. A behavior can ask for the whole of a shared file regardless of which of its layers
 // is open, so switching layers changes what can be picked without hiding what was already drawn or applied.
-function workingFeatures(displayFeatures) {
+function workingFeatures(_displayFeatures) {
   const featuresByFile = new Map();
   // A behavior that draws a shared file answers for the whole file, before the active layer narrows what can be picked.
   // Otherwise the partial set below would hide an earlier edit from another layer that owns the same file.
@@ -284,7 +285,7 @@ function workingFeatures(displayFeatures) {
   }
   for (const filename of shownFiles()) {
     if (featuresByFile.has(filename)) continue;
-    featuresByFile.set(filename, displayFeatures.filter(({properties}) => properties.sourceFile === filename));
+    featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
   for (const filename of session.changedFiles()) {
     if (featuresByFile.has(filename)) continue;
@@ -600,11 +601,13 @@ function travelHistory(travel, afterTravel = () => {}) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  // Undo and redo can restore a shared imported step from another layer. The whole resulting surface is checked before
-  // any of its edits is written, so taking a step back can never leave an orphaned shade or a one-sided frame.
+  // Undo and redo can restore a shared imported step from another layer. The resulting files are checked before any edit
+  // is written, so taking a step back can never leave an orphaned shade, a one-sided frame, or a broken place link.
   const validate = edits => {
-    const problem = surfaceResultProblemForEdits(session, behaviorContext(), edits);
-    return problem ? `This step would leave the surface invalid: ${problem}` : null;
+    const context = behaviorContext();
+    const problem =
+      surfaceResultProblemForEdits(session, context, edits) ?? placeLinkResultProblemForEdits(session, context, edits);
+    return problem ? `This step would leave the data invalid: ${problem}` : null;
   };
   try {
     if (travel(validate) === null) return;
@@ -1065,10 +1068,9 @@ async function createEditorMap(mapMetadata) {
   }
 }
 
-function installMapLayers(visibilityConfig) {
-  const placeVisibility = parseVisibilityConfig(visibilityConfig);
-  const poiProblem = version5PoiProblem(sources, bundleVersion);
-  if (poiProblem) throw new Error(poiProblem);
+function installMapLayers(visibilityConfig, placePolicy) {
+  const policy = bundleVersion >= 5 ? placePolicy : undefined;
+  const placeVisibility = parseVisibilityConfig(visibilityConfig, policy);
   const publishedPlaces = sources.get('places.geojson').collection.features;
   const previewFeaturesByFile = new Map();
   for (const filename of sources.keys()) {
@@ -1129,10 +1131,11 @@ async function start() {
   installWorkspaceControls();
   const canReloadNow = () => !editing?.hasUnappliedEdit && !drafts?.hasOnlyInMemoryChanges();
   startOfflineCopy(canReloadNow, () => Boolean(map?.loaded()));
-  const [bundle, mapMetadata, visibilityConfig, layerRules] = await Promise.all([
+  const [bundle, mapMetadata, visibilityConfig, placePolicy, layerRules] = await Promise.all([
     loadSourceBundle(new URL('sources/', location.href)),
     loadJSON('data/map.json'),
     loadJSON('data/place-visibility.json'),
+    loadJSON('data/place-visibility-policy.json'),
     loadJSON('data/editor-layers.json')
   ]);
   sources = bundle;
@@ -1143,7 +1146,7 @@ async function start() {
   rules = {...rules, layers: {...rules.layers, [junctionFile]: junctionRule}};
   layers = availableLayers([...sources.keys()], bundleVersion);
   await createEditorMap(mapMetadata);
-  installMapLayers(visibilityConfig);
+  installMapLayers(visibilityConfig, placePolicy);
   startEditing(visibilityConfig);
   installMapInteraction();
   renderLayerChoices(layers, chooseLayer);

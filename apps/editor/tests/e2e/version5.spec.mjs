@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, tapAt} from './city-steps.mjs';
+import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
 import {openFixtureCity, stepsOf} from './fixture-city.mjs';
 import {openObjects} from './workspace.mjs';
 
@@ -82,4 +82,54 @@ test('a version 5 municipal corner moves both sides of the border in one changes
     const vertices = geometry => geometry.coordinates[0].map(stepsOf).map(point => point.join(',')).sort();
     expect(vertices(westInPreview.geometry)).toEqual(vertices(westAfter.geometry));
   }
+});
+
+test('a version 5 POI added inside a building is linked and previewed through place layers', async ({page}, testInfo) => {
+  test.skip(testInfo.project.name === 'pages-mobile', 'The desktop drawing flow is used for this one acceptance case.');
+  await openFixtureCity(page, 5);
+
+  await expect.poll(() =>
+    page.evaluate(() => {
+      const source = window.editorDebug.map.getSource('places');
+      const features = source?.serialize?.().data?.features ?? source?._data?.features ?? [];
+      return features.some(feature => feature.properties.label === 'Seed cafe');
+    })
+  ).toBe(true);
+
+  await chooseLayer(page, 'places', [-2, 2], 16);
+  await startDrawing(page, 'Add place');
+  await tapAt(page, [-2, 2]);
+
+  await page.locator('label:has-text("Name (required)") input').fill('Corner cafe');
+  await page.locator('label:has-text("Kind (required)") select').selectOption('cafe');
+  await page.locator('label:has-text("Shown from (override)") select').selectOption('1');
+  await page.locator('label:has-text("Building") button', {hasText: 'Choose'}).click();
+  await page.locator('dialog.river-dialog button', {hasText: /Main street 14/}).click();
+  await applyEdit(page);
+
+  await expect.poll(() =>
+    page.evaluate(() => {
+      const bandOf = label => {
+        const layerIds = window.editorDebug.map
+          .getStyle()
+          .layers.map(layer => layer.id)
+          .filter(id => id.startsWith('place-icons-'));
+        const features = window.editorDebug.map.queryRenderedFeatures({layers: layerIds});
+        const layer = layerIds.find(id => features.some(feature => feature.layer.id === id && feature.properties.label === label));
+        return layer?.match(/^place-icons-(.+)$/)?.[1] ?? null;
+      };
+      return bandOf('Corner cafe');
+    })
+  ).toBe('1-open');
+
+  const {changeset} = await exportChangeset(page, testInfo);
+  const placeOps = operationsOn(changeset, 'places.geojson');
+  expect(placeOps).toHaveLength(1);
+  expect(placeOps[0].operation).toBe('add');
+  expect(placeOps[0].after.properties.buildingEntityId).toBe('way/1');
+  expect(placeOps[0].after.properties.kind).toBe('cafe');
+  expect(placeOps[0].after.properties.name).toBe('Corner cafe');
+  expect(placeOps[0].after.properties.visibilityOverride).toBe(1);
+  expect(placeOps[0].after.properties.id).toBeUndefined();
+  expect(placeOps[0].after.properties.category).toBeUndefined();
 });
