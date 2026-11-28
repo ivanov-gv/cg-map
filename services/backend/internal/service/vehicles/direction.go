@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Direction tracking constants, identical to apps/web/src/transport/vehicle-direction.js.
+// Direction tracking constants, identical to apps/web/src/vehicle-direction.js.
 const (
 	// minMovementMetres is how far a vehicle must move before its direction changes; smaller moves may be GPS noise.
 	minMovementMetres = 20.0

@@ -120,8 +120,8 @@ for a protobuf-defined server API; its Go 1.26 minimum is also the module's mini
 - `internal/server/web`: static files, web config, health checks and the API 404.
 - `internal/service/vehicles`: the live vehicle domain, with no HTTP or wire formats. `Feed` caches normalized
   snapshots, `Observer` keeps it refreshed and gates it until movement is known, and `direction.go` derives directions,
-  mirroring apps/web/src/transport/vehicle-direction.js. Its test reads a `testdata/` copy of the pinned fixture;
-  `tests/` checks that copy byte-for-byte against the pinned contracts package. Data comes from a `vehicles.Source`.
+  mirroring apps/web/src/vehicle-direction.js. Its test reads a `testdata/` copy of the pinned fixture; `tests/` checks
+  that copy byte-for-byte against the pinned contracts package. Data comes from a `vehicles.Source`.
 - `internal/client/epodgorica`: the live `vehicles.Source` (fixed upstream, no credentials, the relay's
   body/status/array checks). `vehicles.Unavailable` replaces it when live transport is off. Live positions are never
   written to disk; tests use local fakes, never the upstream.
