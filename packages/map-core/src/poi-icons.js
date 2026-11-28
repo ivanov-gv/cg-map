@@ -8,7 +8,7 @@ const sharedIconColor = '#193f36';
 const fallbackIconColor = '#5f6f7d';
 const glyphColor = '#ffffff';
 const sharedCategory = 'shared';
-const otherCategory = 'other';
+export const otherCategory = 'other';
 const glyphs = {
   food(context) {
     // cup

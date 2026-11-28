@@ -19,10 +19,10 @@ const rawConfig = JSON.parse(
   fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json')))
 );
 const config = parseVisibilityConfig(rawConfig);
-const place = (id, visibilityLevel, coordinates = [19.26, 42.44], extra = {}) => ({
+const place = (entityId, visibilityLevel, coordinates = [19.26, 42.44], extra = {}) => ({
   type: 'Feature',
   geometry: {type: 'Point', coordinates},
-  properties: {id, name: id, category: 'shops', visibilityLevel, ...extra}
+  properties: {entityId, name: entityId, kind: 'bakery', visibilityLevel, ...extra}
 });
 
 test('published levels are consecutive, cumulative, and inclusive at each threshold', () => {
@@ -81,12 +81,26 @@ test('malformed configurations are rejected', () => {
 });
 
 test('a missing level normalizes to the fallback; an invalid one fails visibly', () => {
-  const missing = place('a');
+  const missing = place('node/a', 5);
   delete missing.properties.visibilityLevel;
   assert.equal(normalizePlaces([missing], config)[0].properties.visibilityLevel, 5);
   for (const bad of [0, 6, 1.5, '2', false, null])
-    assert.throws(() => normalizePlaces([place('a', bad)], config), /invalid visibilityLevel/);
+    assert.throws(() => normalizePlaces([place('node/a', bad)], config), /invalid visibilityLevel/);
   assert.throws(() => assertPublishedPlaces([missing], config), /needs a valid/);
+});
+
+test('released POIs use their id until data publishes entityId', () => {
+  const legacy = place('node/a', 2);
+  legacy.properties.id = legacy.properties.entityId;
+  delete legacy.properties.entityId;
+  assert.equal(normalizePlaces([legacy], config)[0].properties.visibilityLevel, 2);
+  assert.doesNotThrow(() => assertPublishedPlaces([legacy], config));
+  assert.equal(markerKeys([legacy]).get('node/a'), 'node/a');
+  const marker = buildPlaceMarkers([legacy], markerKeys([legacy]))[0];
+  assert.equal(marker.properties.markerKey, 'node/a');
+  assert.deepEqual(JSON.parse(marker.properties.activeIds), ['node/a']);
+  delete legacy.properties.id;
+  assert.throws(() => normalizePlaces([legacy], config), /missing entity identity/);
 });
 
 test('code-point order is not UTF-16 unit order', () => {
@@ -96,18 +110,23 @@ test('code-point order is not UTF-16 unit order', () => {
 });
 
 test('shared marker identity ignores filters and levels; members grow only at thresholds', () => {
-  const directory = [place('z', 5), place('a', 2), place('m', 4), place('alone', 3, [19.3, 42.5])];
+  const directory = [
+    place('node/z', 5),
+    place('node/a', 2),
+    place('node/m', 4),
+    place('node/alone', 3, [19.3, 42.5])
+  ];
   const keys = markerKeys(directory);
-  assert.equal(keys.get('alone'), 'alone');
-  assert.equal(keys.get('z'), keys.get('a'));
-  assert.equal(markerKeys([...directory].reverse()).get('a'), keys.get('a'));
-  const markers = buildPlaceMarkers(directory, keys).filter(marker => marker.properties.markerKey === keys.get('a'));
+  assert.equal(keys.get('node/alone'), 'node/alone');
+  assert.equal(keys.get('node/z'), keys.get('node/a'));
+  assert.equal(markerKeys([...directory].reverse()).get('node/a'), keys.get('node/a'));
+  const markers = buildPlaceMarkers(directory, keys).filter(marker => marker.properties.markerKey === keys.get('node/a'));
   assert.deepEqual(
     markers.map(marker => [marker.properties.band, marker.properties.count, marker.properties.activeIds]),
     [
-      ['2-4', '', '["a"]'],
-      ['4-5', '2', '["a","m"]'],
-      ['5-open', '3', '["a","m","z"]']
+      ['2-4', '', '["node/a"]'],
+      ['4-5', '2', '["node/a","node/m"]'],
+      ['5-open', '3', '["node/a","node/m","node/z"]']
     ]
   );
   assert.deepEqual(
@@ -115,28 +134,45 @@ test('shared marker identity ignores filters and levels; members grow only at th
     [true, false, false]
   );
   const filtered = buildPlaceMarkers([directory[0]], keys);
-  assert.equal(filtered[0].properties.markerKey, keys.get('a'));
+  assert.equal(filtered[0].properties.markerKey, keys.get('node/z'));
   assert.equal(filtered[0].properties.icon, 'place-shops');
 });
 
 test('marker order is independent of input order', () => {
-  const directory = [place('b', 4), place('a', 4, [19.1, 42.1]), place('c', 2, [19.2, 42.2])];
+  const directory = [
+    place('node/b', 4),
+    place('node/a', 4, [19.1, 42.1]),
+    place('node/c', 2, [19.2, 42.2])
+  ];
   const summary = features =>
     buildPlaceMarkers(features, markerKeys(features)).map(marker => [
       marker.properties.markerKey,
       marker.properties.rank
     ]);
   assert.deepEqual(summary(directory), [
-    ['c', 0],
-    ['a', 1],
-    ['b', 2]
+    ['node/c', 0],
+    ['node/a', 1],
+    ['node/b', 2]
   ]);
   assert.deepEqual(summary([...directory].reverse()), summary(directory));
 });
 
+test('entityId wins over a conflicting legacy id', () => {
+  const canonical = place('node/first', 2, [19.4, 42.4]);
+  canonical.properties.id = 'node/legacy-first';
+  const duplicate = place('node/second', 2, [19.4, 42.4]);
+  duplicate.properties.id = 'node/first';
+  const directory = [canonical, duplicate];
+  const keys = markerKeys(directory);
+  assert.equal(keys.get('node/first'), 'shared:["node/first","node/second"]');
+  assert.equal(keys.get('node/legacy-first'), undefined);
+  const marker = buildPlaceMarkers(directory, keys)[0];
+  assert.deepEqual(JSON.parse(marker.properties.activeIds), ['node/first', 'node/second']);
+});
+
 test('an override changes only its own threshold band', () => {
-  const base = [place('a', 4, [19.1, 42.1]), place('b', 5, [19.2, 42.2])],
-    promoted = [place('a', 2, [19.1, 42.1]), base[1]];
+  const base = [place('node/a', 4, [19.1, 42.1]), place('node/b', 5, [19.2, 42.2])],
+    promoted = [place('node/a', 2, [19.1, 42.1]), base[1]];
   const bands = features =>
     Object.fromEntries(
       buildPlaceMarkers(features, markerKeys(features)).map(marker => [
@@ -144,12 +180,16 @@ test('an override changes only its own threshold band', () => {
         marker.properties.band
       ])
     );
-  assert.deepEqual(bands(base), {a: '4-open', b: '5-open'});
-  assert.deepEqual(bands(promoted), {a: '2-open', b: '5-open'});
+  assert.deepEqual(bands(base), {'node/a': '4-open', 'node/b': '5-open'});
+  assert.deepEqual(bands(promoted), {'node/a': '2-open', 'node/b': '5-open'});
 });
 
 test('the requested listing hands over to the ordinary marker at its threshold', () => {
-  const directory = [place('low', 5), place('high', 2), place('other', 4, [19.3, 42.5])],
+  const directory = [
+      place('node/low', 5),
+      place('node/high', 2),
+      place('node/other', 4, [19.3, 42.5])
+    ],
     keys = markerKeys(directory);
   assert.deepEqual(requestedPlaceMarker(null, directory, keys, config).features, []);
   const alone = requestedPlaceMarker(directory[2], directory, keys, config);
@@ -168,7 +208,7 @@ test('the requested listing hands over to the ordinary marker at its threshold',
 });
 
 test('generated layers are valid, zoom-gated, and icons ignore collisions', () => {
-  const directory = [place('a', 2), place('b', 5), place('c', 3, [19.3, 42.5])];
+  const directory = [place('node/a', 2), place('node/b', 5), place('node/c', 3, [19.3, 42.5])];
   const bands = placeBands(directory, config);
   assert.deepEqual(
     bands.filter(band => band.end).map(band => band.id),
@@ -201,15 +241,86 @@ test('generated layers are valid, zoom-gated, and icons ignore collisions', () =
 });
 
 test('tap hits expand to each listing once in a stable order', () => {
-  const firstPlace = place('a', 4),
-    secondPlace = place('b', 2),
-    byId = new Map([
-      ['a', firstPlace],
-      ['b', secondPlace]
+  const firstPlace = place('node/a', 4),
+    secondPlace = place('node/b', 2),
+    byEntityId = new Map([
+      ['node/a', firstPlace],
+      ['node/b', secondPlace]
     ]);
-  const hits = [{properties: {activeIds: '["a","b"]'}}, {properties: {activeIds: '["b"]'}}, {properties: {}}];
+  const hits = [
+    {properties: {activeIds: '["node/a","node/b"]'}},
+    {properties: {activeIds: '["node/b"]'}},
+    {properties: {}}
+  ];
   assert.deepEqual(
-    listingsAtHits(hits, byId).map(listing => listing.properties.id),
-    ['b', 'a']
+    listingsAtHits(hits, byEntityId).map(listing => listing.properties.entityId),
+    ['node/b', 'node/a']
+  );
+});
+
+test('POI symbols come from kind, with table cases for every category', () => {
+  const cases = [
+    {entityId: 'node/restaurant', name: 'Restaurant', kind: 'restaurant', category: 'food', icon: 'place-food'},
+    {entityId: 'node/museum', name: 'Museum', kind: 'museum', category: 'sights', icon: 'place-sights'},
+    {entityId: 'node/bakery', name: 'Bakery', kind: 'bakery', category: 'shops', icon: 'place-shops'},
+    {entityId: 'node/hotel', name: 'Hotel', kind: 'hotel', category: 'stay', icon: 'place-stay'},
+    {entityId: 'node/atm', name: 'ATM', kind: 'atm', category: 'essentials', icon: 'place-essentials'},
+    {entityId: 'node/unclassified', name: 'Unknown', kind: 'unmapped_kind', category: 'other', icon: 'place-other'}
+  ];
+  // A released 0.1.0 POI has only `id`; its kind and stored category agree, so it keeps today's icon and identity.
+  const releasedIdOnly = {
+    type: 'Feature',
+    geometry: {type: 'Point', coordinates: [19.2 + cases.length / 100, 42.4]},
+    properties: {
+      id: 'node/308749213',
+      name: 'Euro Petrol',
+      kind: 'fuel',
+      category: 'essentials',
+      visibilityLevel: 5
+    }
+  };
+  const directory = [
+    ...cases.map(({entityId, name, kind, category}, index) =>
+      place(entityId, 2, [19.2 + index / 100, 42.4], {name, kind, category})
+    ),
+    releasedIdOnly
+  ];
+  const markers = buildPlaceMarkers(directory, markerKeys(directory));
+  const lookOf = identity => {
+    const marker = markers.find(candidate => candidate.properties.markerKey === identity);
+    return [marker.properties.category, marker.properties.icon];
+  };
+  assert.deepEqual(
+    cases.map(({entityId}) => lookOf(entityId)),
+    cases.map(({category, icon}) => [category, icon])
+  );
+  const legacyMarker = markers.find(marker => marker.properties.markerKey === releasedIdOnly.properties.id);
+  assert.deepEqual(
+    [legacyMarker.properties.category, legacyMarker.properties.icon, legacyMarker.properties.activeIds],
+    ['essentials', 'place-essentials', '["node/308749213"]']
+  );
+});
+
+test('ambiguous kinds follow the kind table without a stored override', () => {
+  // The five POIs whose stored category disagrees with their kind in the editor's 0.2.0 pin. The #517 decision moves
+  // them to the kind's category, so their icons change as agreed.
+  const cases = [
+    ['node/4222066492', 'EKO', 'fuel', 'shops', 'essentials', 'place-essentials'],
+    ['node/4222113290', 'EKO', 'fuel', 'shops', 'essentials', 'place-essentials'],
+    ['way/383768698', 'Petrol', 'fuel', 'shops', 'essentials', 'place-essentials'],
+    ['way/303138707', 'Palača Smekja', 'hotel', 'sights', 'stay', 'place-stay'],
+    ['way/1464599145', 'Kampana Tower', 'yes', 'sights', 'shops', 'place-shops']
+  ];
+  const directory = cases.map(([entityId, name, kind, category], index) =>
+    place(entityId, 2, [19.3 + index / 100, 42.43], {name, kind, category})
+  );
+  const markers = buildPlaceMarkers(directory, markerKeys(directory));
+  const lookOf = entityId => {
+    const marker = markers.find(candidate => candidate.properties.markerKey === entityId);
+    return [marker.properties.category, marker.properties.icon];
+  };
+  assert.deepEqual(
+    cases.map(([entityId]) => lookOf(entityId)),
+    cases.map(([_entityId, _name, _kind, _category, expectedCategory, expectedIcon]) => [expectedCategory, expectedIcon])
   );
 });

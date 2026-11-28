@@ -12,9 +12,21 @@ function walkingLayersFor(properties) {
   return filters.filter(({filter}) => filter.filter({zoom: 16}, feature)).map(({id}) => id);
 }
 
-// Every walking way gets exactly one walking pattern: two would draw dots over steps or over a park route.
-test('each walking path class lands in exactly one walking layer', () => {
+// Version 5 stores the walker's class on each path, including tracks. Today's `main` and unclassified fixtures stay
+// in this regression test, so reverting the stored-class rule makes the whole test fail.
+test('walking patterns come from stored pathClass with legacy fixtures', () => {
   const cases = [
+    [{kind: 'footway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'cycleway', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'track', pathClass: 'park'}, 'park-routes'],
+    [{kind: 'footway', pathClass: 'city'}, 'footways'],
+    [{kind: 'path', pathClass: 'city'}, 'footways'],
+    [{kind: 'track', pathClass: 'city'}, 'footways'],
+    [{kind: 'footway', pathClass: 'trail'}, 'paths'],
+    [{kind: 'track', pathClass: 'trail'}, 'paths'],
+    [{kind: 'cycleway', pathClass: 'city'}, 'cycleways'],
+    [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
+    [{kind: 'steps', pathClass: 'trail'}, 'steps'],
     [{kind: 'footway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'cycleway', pathClass: 'main', inGreenArea: true}, 'park-routes'],
     [{kind: 'footway', pathClass: 'main'}, 'footways'],
@@ -23,14 +35,16 @@ test('each walking path class lands in exactly one walking layer', () => {
     [{kind: 'path', inGreenArea: true}, 'paths'],
     [{kind: 'track', pathClass: 'trail', inGreenArea: true}, 'paths'],
     [{kind: 'cycleway', pathClass: 'main'}, 'cycleways'],
-    [{kind: 'cycleway', pathClass: 'trail'}, 'cycleways'],
-    [{kind: 'steps', pathClass: 'trail'}, 'steps'],
     [{kind: 'steps', inGreenArea: true}, 'steps']
   ];
   for (const [properties, expectedLayer] of cases) {
     assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
   }
-  assert.deepEqual(walkingLayersFor({kind: 'pedestrian', pathClass: 'trail'}), [], 'a pedestrian street stays a street');
+  assert.deepEqual(
+    walkingLayersFor({kind: 'pedestrian', pathClass: 'city'}),
+    [],
+    'a pedestrian street stays a street'
+  );
 });
 
 for (const prefix of ['/', '/cg-map/']) {
@@ -58,6 +72,31 @@ test('every extracted green kind keeps the park fill', () => {
   ]);
 });
 
+// Data will publish stored shades in their own tile layer. Until then no feature matches, so today's map is unchanged.
+test('stored shades use the shaded tone over green areas and below roads', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const shade = style.layers.find(layer => layer.id === 'shades');
+  assert.ok(shade, 'shades is missing');
+  assert.equal(shade.type, 'fill');
+  assert.equal(shade.source, 'basemap');
+  assert.equal(shade['source-layer'], 'shades');
+  assert.deepEqual(shade.filter, ['==', ['get', 'kind'], 'shade']);
+  assert.deepEqual(shade.paint, {'fill-color': basemapColors.shadedSlope, 'fill-antialias': false});
+  assert.equal(shade.minzoom, 12);
+  assert.equal(shade.metadata[drawingGroupKey], 'shades');
+  const matches = featureFilter(shade.filter).filter;
+  assert.equal(matches({zoom: 16}, {type: 3, properties: {kind: 'shade'}}), true);
+  assert.equal(matches({zoom: 16}, {type: 3, properties: {kind: 'park'}}), false);
+
+  const positionOf = id => style.layers.findIndex(layer => layer.id === id);
+  const shadePosition = positionOf('shades');
+  const groundRoadIds = ['road-casing', 'minor-casing', 'minor-roads', 'major-roads', 'paths', 'steps'];
+  const groundRoadPositions = groundRoadIds.map(positionOf);
+  assert.ok(positionOf('land') < shadePosition, 'shades must cover green areas');
+  assert.ok(shadePosition < Math.min(...groundRoadPositions), 'shades must stay below ground roads');
+  assert.ok(shadePosition < positionOf('shaded-slopes'), 'shades must not move above the slope tones');
+});
+
 // The wiki's bottom-to-top order is a design rule: a layer moved or added out of order breaks this test.
 test('basemap layers follow the drawing order', () => {
   const style = mapStyle('pmtiles://archive', 'https://local.test/');
@@ -78,6 +117,16 @@ test('coastline lines are not styled as waterways', () => {
     ['==', ['geometry-type'], 'LineString'],
     ['!=', ['get', 'kind'], 'coastline']
   ]);
+});
+
+// The water fill's polygon filter already includes every water kind, so a stored sea polygon needs no style change.
+test('the stored sea polygon passes the water fill filter', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const water = style.layers.find(layer => layer.id === 'water');
+  const matches = featureFilter(water.filter).filter;
+  assert.equal(matches({zoom: 16}, {type: 3, properties: {kind: 'sea'}}), true);
+  assert.equal(matches({zoom: 16}, {type: 3, properties: {kind: 'lake'}}), true, 'the filter is kind-agnostic');
+  assert.equal(water.paint['fill-color'], basemapColors.water);
 });
 
 // One outline carries every road of a crossing, so the deck must not come back as a widened road stroke.

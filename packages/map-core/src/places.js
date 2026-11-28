@@ -6,11 +6,11 @@ import {placeColors} from './palette.js';
 // One instance per map; applications still own search, cards and below-threshold edit overlays.
 export function installPlaces(map, features, config) {
   const directory = normalizePlaces(features, config);
-  const markerKeysById = markerKeys(directory);
+  const markerKeysByEntityId = markerKeys(directory);
   installPlaceIcons(map, placeColors);
   const data = {
     type: 'FeatureCollection',
-    features: buildPlaceMarkers(directory, markerKeysById)
+    features: buildPlaceMarkers(directory, markerKeysByEntityId)
   };
   map.addSource('places', {type: 'geojson', data, promoteId: 'markerKey'});
   const {names, icons} = placeLayers(placeBands(directory, config), config);

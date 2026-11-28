@@ -1,8 +1,19 @@
 // Stable POI visibility (docs/ui-ux/features/poi-visibility.md). Pure policy: no DOM, storage, or map access.
+import {placeCategory} from './place-category.js';
 import {placeIconId, sharedPlaceIcon} from './poi-icons.js';
 
 // Above MapLibre's maximum zoom: with no requested place, the marker layer is never cut off.
 const unboundedMaxZoom = 24;
+
+// Version 5 stores only `entityId`; the released data pin still stores only `id`, so that legacy copy is read until
+// data switches. No feature ever has two competing identities: `entityId` wins when both are present.
+const entityIdOf = feature => feature.properties.entityId ?? feature.properties.id;
+
+function assertEntityIdentity(feature) {
+  const entityId = entityIdOf(feature);
+  if (typeof entityId !== 'string' || !entityId)
+    throw new Error(`Place ${feature.properties.entityId ?? feature.properties.id ?? 'unknown'}: missing entity identity`);
+}
 
 // Validate the shared level table before any marker is admitted.
 export function parseVisibilityConfig(rawConfig) {
@@ -31,10 +42,11 @@ export function parseVisibilityConfig(rawConfig) {
 // it must never silently become high priority.
 export function normalizePlaces(features, config) {
   return features.map(feature => {
+    assertEntityIdentity(feature);
     const level =
       feature.properties.visibilityLevel === undefined ? config.fallback : feature.properties.visibilityLevel;
     if (!config.thresholds.has(level))
-      throw new Error(`Place ${feature.properties.id}: invalid visibilityLevel ${level}`);
+      throw new Error(`Place ${entityIdOf(feature)}: invalid visibilityLevel ${level}`);
     return {
       ...feature,
       properties: {...feature.properties, visibilityLevel: level}
@@ -44,9 +56,11 @@ export function normalizePlaces(features, config) {
 
 // Producers require explicit reviewed levels; consumers may normalize only missing legacy values.
 export function assertPublishedPlaces(features, config) {
-  for (const feature of features)
+  for (const feature of features) {
+    assertEntityIdentity(feature);
     if (!config.thresholds.has(feature.properties.visibilityLevel))
-      throw new Error(`Place ${feature.properties.id}: published snapshot needs a valid visibilityLevel`);
+      throw new Error(`Place ${entityIdOf(feature)}: published snapshot needs a valid visibilityLevel`);
+  }
 }
 
 // Use code-point order, independent of browser locale and input order.
@@ -66,7 +80,7 @@ export function compareCodePoints(left, right) {
 
 export const comparePlaces = (left, right) =>
   left.properties.visibilityLevel - right.properties.visibilityLevel ||
-  compareCodePoints(left.properties.id, right.properties.id);
+  compareCodePoints(entityIdOf(left), entityIdOf(right));
 
 const coordinateKey = feature => feature.geometry.coordinates.join(',');
 
@@ -85,9 +99,9 @@ function groupByCoordinates(features) {
 export function markerKeys(directory) {
   const keys = new Map();
   for (const members of groupByCoordinates(directory).values()) {
-    const ids = members.map(feature => feature.properties.id).sort(compareCodePoints);
+    const ids = members.map(entityIdOf).sort(compareCodePoints);
     const key = ids.length === 1 ? ids[0] : `shared:${JSON.stringify(ids)}`;
-    for (const id of ids) keys.set(id, key);
+    for (const entityId of ids) keys.set(entityId, key);
   }
   return keys;
 }
@@ -118,27 +132,29 @@ const placeLabel = properties => properties['name:en'] ?? properties.name ?? '';
 function markerProperties(activeMembers, markerKey, band, isFirstBand) {
   const leadProperties = activeMembers[0].properties;
   const isShared = activeMembers.length > 1;
+  const category = placeCategory(leadProperties);
   return {
     markerKey,
     band,
     first: isFirstBand,
-    category: leadProperties.category,
+    category,
     visibilityLevel: leadProperties.visibilityLevel,
-    icon: isShared ? sharedPlaceIcon : placeIconId(leadProperties.category),
+    icon: isShared ? sharedPlaceIcon : placeIconId(category),
     count: isShared ? String(activeMembers.length) : '',
     label: isShared ? '' : placeLabel(leadProperties),
-    activeIds: JSON.stringify(activeMembers.map(feature => feature.properties.id))
+    // Keep the wire name for consumers; version 5 fills it with stable entity IDs.
+    activeIds: JSON.stringify(activeMembers.map(entityIdOf))
   };
 }
 
 // One feature per marker per zoom band. Built only when the filter changes, never during camera movement.
 // rank is a total order from the band's level and stable ID; it does not depend on input order or the camera.
-export function buildPlaceMarkers(features, markerKeysById) {
+export function buildPlaceMarkers(features, markerKeysByEntityId) {
   const markers = [];
   for (const members of groupByCoordinates(features).values()) {
     const sortedMembers = [...members].sort(comparePlaces);
     const levels = [...new Set(sortedMembers.map(feature => feature.properties.visibilityLevel))];
-    const markerKey = markerKeysById.get(sortedMembers[0].properties.id);
+    const markerKey = markerKeysByEntityId.get(entityIdOf(sortedMembers[0]));
     levels.forEach((start, index) => {
       const activeMembers = sortedMembers.filter(feature => feature.properties.visibilityLevel <= start);
       markers.push({
@@ -167,14 +183,14 @@ export function buildPlaceMarkers(features, markerKeysById) {
 
 // The one requested listing below its threshold. It hands over to the ordinary marker at the earliest zoom where
 // any listing at that location is admitted, so the same position never holds two icons.
-export function requestedPlaceMarker(place, filtered, markerKeysById, config) {
+export function requestedPlaceMarker(place, filtered, markerKeysByEntityId, config) {
   if (!place) return {features: [], maxzoom: unboundedMaxZoom};
   const placeCoordinateKey = coordinateKey(place);
   const levels = filtered
     .filter(feature => coordinateKey(feature) === placeCoordinateKey)
     .map(feature => feature.properties.visibilityLevel);
   const properties = {
-    ...markerProperties([place], markerKeysById.get(place.properties.id), 'requested', false),
+    ...markerProperties([place], markerKeysByEntityId.get(entityIdOf(place)), 'requested', false),
     label: place.properties.name
   };
   return {
@@ -247,12 +263,12 @@ export function placeLayers(bands, config) {
 }
 
 // Listings under a map tap: every marker's admitted members, once each, in a stable order.
-export function listingsAtHits(hits, placesById) {
+export function listingsAtHits(hits, placesByEntityId) {
   const listings = new Map();
   for (const hit of hits) {
     const activeIds = JSON.parse(hit.properties.activeIds ?? '[]');
-    for (const id of activeIds) {
-      if (placesById.has(id)) listings.set(id, placesById.get(id));
+    for (const entityId of activeIds) {
+      if (placesByEntityId.has(entityId)) listings.set(entityId, placesByEntityId.get(entityId));
     }
   }
   return [...listings.values()].sort(comparePlaces);
