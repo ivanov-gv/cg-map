@@ -20,8 +20,8 @@ const rawConfig = JSON.parse(
   fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json')))
 );
 const config = parseVisibilityConfig(rawConfig);
-// Verbatim policy keys: an exact kind rule, then a category default keyed by the vocabulary in place-category.js.
-const policy = {kinds: {museum: 2, memorial: 5}, categories: {food: 4, sights: 4, stay: 3}};
+// Distinct values let a test tell an exact kind rule (2) from a category default (3 or 5) and the fallback (4).
+const policy = {fallbackLevel: 4, kinds: {memorial: 2}, categories: {food: 5, sights: 3}};
 const policyConfig = parseVisibilityConfig(rawConfig, policy);
 const place = (entityId, visibilityLevel, coordinates = [19.26, 42.44], extra = {}) => ({
   type: 'Feature',
@@ -87,6 +87,10 @@ test('malformed configurations are rejected', () => {
   assert.throws(() => parseVisibilityConfig({...rawConfig, version: 2}));
   assert.throws(() => parseVisibilityConfig({...rawConfig, legacyFallbackLevel: 9}), /fallback/);
   assert.throws(() => parseVisibilityConfig({...rawConfig, legacyFallbackLevel: 1}), /fallback/);
+  assert.throws(() => parseVisibilityConfig(rawConfig, {}), /policy fallback/);
+  assert.throws(() => parseVisibilityConfig(rawConfig, {fallbackLevel: 9}), /policy fallback/);
+  assert.throws(() => parseVisibilityConfig(rawConfig, {fallbackLevel: 1}), /policy fallback/);
+  assert.throws(() => parseVisibilityConfig(rawConfig, {fallbackLevel: {toString: null}}), /policy fallback/);
 });
 
 test('a missing level normalizes to the fallback; an invalid one fails visibly', () => {
@@ -98,10 +102,11 @@ test('a missing level normalizes to the fallback; an invalid one fails visibly',
   assert.throws(() => assertPublishedPlaces([missing], config), /needs a valid/);
 });
 
-test('visibilityOverride wins over a stored level and every default', () => {
-  const feature = place('node/override', 4, [19.26, 42.44], {kind: 'museum', visibilityOverride: 2});
-  assert.equal(placeVisibilityLevel(feature, policyConfig), 2);
-  assert.equal(normalizePlaces([feature], policyConfig)[0].properties.visibilityLevel, 2);
+test('an override without a stored level wins over every default', () => {
+  const feature = placeWithoutLevel('node/override', 'memorial', {visibilityOverride: 5});
+  assert.equal(Object.hasOwn(feature.properties, 'visibilityLevel'), false);
+  assert.equal(placeVisibilityLevel(feature, policyConfig), 5);
+  assert.equal(normalizePlaces([feature], policyConfig)[0].properties.visibilityLevel, 5);
 });
 
 test('a version-3 POI keeps its stored visibilityLevel', () => {
@@ -115,19 +120,27 @@ test('a version-3 POI keeps its stored visibilityLevel', () => {
   assert.equal(placeVisibilityLevel(feature, policyConfig), 5);
 });
 
-test('an exact kind rule wins over its category default', () => {
-  assert.equal(placeVisibilityLevel(placeWithoutLevel('node/memorial', 'memorial'), policyConfig), 5);
+test('an exact kind rule wins over its category default and the fallback', () => {
+  assert.equal(placeVisibilityLevel(placeWithoutLevel('node/memorial', 'memorial'), policyConfig), 2);
+});
+
+test('normalizePlaces uses the policy for a POI with no stored level', () => {
+  // `museum` has no exact rule here: only the policy's sights category can produce 3.
+  const feature = placeWithoutLevel('node/museum', 'museum');
+  assert.equal(normalizePlaces([feature], policyConfig)[0].properties.visibilityLevel, 3);
 });
 
 test('a kind without its own rule uses its category from the kind vocabulary', () => {
   // The stored category is deliberately wrong: version 5 drops it, so the resolver asks placeCategory instead.
   const feature = placeWithoutLevel('node/cafe', 'cafe', {category: 'stay'});
-  assert.equal(placeVisibilityLevel(feature, policyConfig), 4);
+  assert.equal(placeVisibilityLevel(feature, policyConfig), 5);
 });
 
-test('a kind with no rule or mapped default uses the fallback', () => {
+test('the fallback comes from the supplied policy, or the contract when none is supplied', () => {
   const feature = placeWithoutLevel('node/unknown', 'unmapped_kind', {category: 'sights'});
-  assert.equal(placeVisibilityLevel(feature, policyConfig), config.fallback);
+  assert.equal(placeVisibilityLevel(feature, config), 5);
+  assert.equal(placeVisibilityLevel(feature, policyConfig), 4);
+  assert.equal(normalizePlaces([feature], policyConfig)[0].properties.visibilityLevel, 4);
 });
 
 test('an invalid override names the POI and the value it came from', () => {
@@ -142,10 +155,39 @@ test('an invalid override names the POI and the value it came from', () => {
   );
 });
 
+test('an invalid level without toString still names the POI and its field', () => {
+  for (const field of ['visibilityOverride', 'visibilityLevel']) {
+    const feature = placeWithoutLevel('node/unstringifiable', 'memorial');
+    feature.properties[field] = {toString: null};
+    const expected = `Place node/unstringifiable: invalid ${field} {"toString":null}`;
+    assert.throws(() => placeVisibilityLevel(feature, policyConfig), error => error.message === expected);
+  }
+});
+
 test('unsupported policy defaults are rejected before any POI is read', () => {
-  assert.throws(() => parseVisibilityConfig(rawConfig, {kinds: []}), /kind defaults must be an object/);
-  assert.throws(() => parseVisibilityConfig(rawConfig, {kinds: {museum: 1}}), /kind museum: invalid default level 1/);
-  assert.throws(() => parseVisibilityConfig(rawConfig, {categories: {food: 9}}), /category food: invalid default level 9/);
+  assert.throws(
+    () => parseVisibilityConfig(rawConfig, {fallbackLevel: 4, kinds: []}),
+    /kind defaults must be an object/
+  );
+  assert.throws(
+    () => parseVisibilityConfig(rawConfig, {fallbackLevel: 4, kinds: {memorial: 1}}),
+    /kind memorial: invalid default level 1/
+  );
+  assert.throws(
+    () => parseVisibilityConfig(rawConfig, {fallbackLevel: 4, categories: {food: 9}}),
+    /category food: invalid default level 9/
+  );
+});
+
+test('mutating a supplied policy after parsing cannot bypass validation', () => {
+  const mutablePolicy = {fallbackLevel: 4, kinds: {memorial: 2}, categories: {food: 5}};
+  const mutableConfig = parseVisibilityConfig(rawConfig, mutablePolicy);
+  mutablePolicy.kinds.memorial = 1;
+  mutablePolicy.categories.food = 6;
+  mutablePolicy.fallbackLevel = 1;
+  assert.equal(placeVisibilityLevel(placeWithoutLevel('node/mutated-kind', 'memorial'), mutableConfig), 2);
+  assert.equal(placeVisibilityLevel(placeWithoutLevel('node/mutated-category', 'cafe'), mutableConfig), 5);
+  assert.equal(placeVisibilityLevel(placeWithoutLevel('node/mutated-fallback', 'unmapped_kind'), mutableConfig), 4);
 });
 
 test('released POIs use their id until data publishes entityId', () => {

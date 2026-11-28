@@ -15,19 +15,34 @@ function assertEntityIdentity(feature) {
     throw new Error(`Place ${feature.properties.entityId ?? feature.properties.id ?? 'unknown'}: missing entity identity`);
 }
 
+// A JSON object may replace its own `toString`, so never use string interpolation to report an invalid value.
+function formatInvalidLevel(level) {
+  if (level === null || typeof level !== 'object') return String(level);
+  try {
+    return JSON.stringify(level) ?? typeof level;
+  } catch {
+    return typeof level;
+  }
+}
+
 function assertPolicyDefaults(defaults, label, thresholds) {
   if (defaults === undefined) return;
   if (defaults === null || typeof defaults !== 'object' || Array.isArray(defaults))
     throw new Error(`Place visibility: ${label} defaults must be an object`);
   for (const [name, level] of Object.entries(defaults)) {
     if (level === 1 || !thresholds.has(level))
-      throw new Error(`Place visibility: ${label} ${name}: invalid default level ${level}`);
+      throw new Error(`Place visibility: ${label} ${name}: invalid default level ${formatInvalidLevel(level)}`);
   }
 }
 
-// Validate the shared level table and any policy defaults before any marker is admitted. The optional policy holds
-// data-owned defaults; a consumer that has not loaded it still gets today's fallback for a POI with no level.
-export function parseVisibilityConfig(rawConfig, policy = {}) {
+function assertFallbackLevel(level, thresholds, origin) {
+  if (!thresholds.has(level) || level === 1)
+    throw new Error(`Place visibility: invalid ${origin} fallback level ${formatInvalidLevel(level)}`);
+}
+
+// Validate the shared level table and any policy defaults before any marker is admitted. A supplied policy owns the
+// fallback; a consumer that has not loaded one still gets today's fallback for a POI with no level.
+export function parseVisibilityConfig(rawConfig, policy) {
   if (rawConfig?.version !== 1 || !Array.isArray(rawConfig.levels) || !rawConfig.levels.length)
     throw new Error('Place visibility: unsupported configuration');
   rawConfig.levels.forEach((levelEntry, index) => {
@@ -39,23 +54,27 @@ export function parseVisibilityConfig(rawConfig, policy = {}) {
       throw new Error('Place visibility: levels must be consecutive with increasing zoom');
   });
   const thresholds = new Map(rawConfig.levels.map(levelEntry => [levelEntry.level, levelEntry.minZoom]));
+  const hasPolicy = policy !== undefined && policy !== null;
+  const fallback = hasPolicy ? policy.fallbackLevel : rawConfig.legacyFallbackLevel;
+  const policyKinds = policy?.kinds ?? {};
+  const policyCategories = policy?.categories ?? {};
   // Neither the fallback nor a policy default may reach the earliest, individually reviewed level.
-  if (!thresholds.has(rawConfig.legacyFallbackLevel) || rawConfig.legacyFallbackLevel === 1)
-    throw new Error('Place visibility: invalid fallback level');
-  assertPolicyDefaults(policy?.kinds, 'kind', thresholds);
-  assertPolicyDefaults(policy?.categories, 'category', thresholds);
+  assertFallbackLevel(fallback, thresholds, hasPolicy ? 'policy' : 'contract');
+  assertPolicyDefaults(policyKinds, 'kind', thresholds);
+  assertPolicyDefaults(policyCategories, 'category', thresholds);
   return {
     levels: rawConfig.levels.map(levelEntry => levelEntry.level),
     thresholds,
-    fallback: rawConfig.legacyFallbackLevel,
-    kindDefaults: policy?.kinds ?? {},
-    categoryDefaults: policy?.categories ?? {}
+    fallback,
+    // Copy the validated tables: a caller mutating its policy later must not bypass validation.
+    kindDefaults: {...policyKinds},
+    categoryDefaults: {...policyCategories}
   };
 }
 
 function checkedVisibilityLevel(feature, source, level, config) {
   if (!config.thresholds.has(level))
-    throw new Error(`Place ${entityIdOf(feature)}: invalid ${source} ${level}`);
+    throw new Error(`Place ${entityIdOf(feature)}: invalid ${source} ${formatInvalidLevel(level)}`);
   return level;
 }
 
