@@ -1,11 +1,12 @@
 // The basemap's drawing order, bottom to top, from the wiki page UI 3.Core. A bridge deck lies above the canyon, water,
 // ground and roads at or below ground level, but below roads whose own tags put them on a bridge. Every basemap layer
 // belongs to exactly one group, and the style lists the groups in this order.
-// One corner-case override, which the wiki allows: slope tones come before canyon walls, water and buildings. The
-// riverbanks of the Morača are parks, so slopes drawn after the walls would cover them; slopes lie only inside green
-// areas, so drawing them under water and buildings changes nothing else.
+// One corner-case override, which the wiki allows: stored shades and slope tones come before canyon walls, water and
+// buildings. The riverbanks of the Morača are parks, so relief fills drawn after the walls would cover them; shades and
+// slopes lie only inside green areas, so drawing them under water and buildings changes nothing else.
 export const drawingGroups = [
   'land',
+  'shades',
   'shaded-slopes',
   'sunlit-slopes',
   'canyon-walls',
